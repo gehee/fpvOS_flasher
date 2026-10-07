@@ -15,7 +15,7 @@ cannot do anything the vendor tool could not.
 
 | Device | Images | Status |
 | --- | --- | --- |
-| Ascent air unit | `Ascent_H_Sky_*.img`, stock or fpvOS | tested against a simulated unit, in Node and in headless Chrome; **not yet on hardware** |
+| Ascent Lite, Ascent Lite+ air unit | `Ascent_H_Sky_*.img`, stock or fpvOS | tested against a simulated unit, in Node and in headless Chrome; **not yet on hardware** |
 
 A new device needs these changes:
 - an entry in `DEVICES` in `app.js`, which gives its USB vendor id and the name
