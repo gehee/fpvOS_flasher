@@ -15,10 +15,6 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -33,6 +29,10 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: test
     runs-on: ubuntu-24.04
+    # one deploy at a time; a newer push waits rather than cutting one short
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -48,4 +48,4 @@ jobs:
         with:
           path: _site
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
