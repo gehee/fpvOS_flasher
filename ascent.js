@@ -12,6 +12,8 @@
 //   closed                             - a promise that settles when the port goes away
 //   reopen({timeoutMs})                - waits for the unit to come back after a reboot
 
+import { crc32 } from './checksum.js';
+
 export const CMD = Object.freeze({
   UNKNOWN: 0,             // the unit's reply to a command it does not know
   REBOOT: 3,              // payload "clean": reboot into the update system
@@ -44,22 +46,8 @@ const UNUSED = 0xabcd;
 const MAX_REPLY = 64 * 1024;   // replies are a few hundred bytes; the unit's side takes 1 MiB chunks
 const EMPTY = new Uint8Array(0);
 
-const CRC_TABLE = (() => {
-  const t = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c >>> 0;
-  }
-  return t;
-})();
-
 // crc32(b, crc32(a)) == crc32(a + b)
-export function crc32(bytes, crc = 0) {
-  let c = (crc ^ 0xffffffff) >>> 0;
-  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
+export { crc32 };
 
 export function encodeFrame({ cmd, seq, retry = 0, payload = EMPTY, type = TYPE_REQUEST }) {
   const f = new Uint8Array(HEADER_LEN + payload.length);

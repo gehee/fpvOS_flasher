@@ -36,7 +36,9 @@ Then open <http://localhost:8000>:
 1. Plug in the device and click **Connect**, then pick its port in the
    browser's list. A device the page was allowed before connects as soon as it
    is plugged in.
-2. Drop a firmware image on the page, and read the checks it shows.
+2. Drop a firmware image on the page, and read the checks it shows. An archive
+   holding one works too, so the vendor's `.zip` download can be dropped as it
+   is. See [Archives](#archives) for the formats.
 3. Click **Flash**.
 
 To use the page from another computer on the LAN, either open it through an
@@ -46,6 +48,26 @@ its address in `chrome://flags`.
 Close the vendor's PC tool and any serial terminal first, because only one
 program can open the port. On Linux, your user needs access to
 `/dev/ttyACM*` (the `dialout` group).
+
+## Archives
+
+The page takes an image as is, or an archive holding one:
+
+- `.zip`, stored or deflate, with zip64. The vendor's download is a zip of
+  this kind.
+- `.xz` and `.gz`.
+- `.tar`, alone or inside `.gz` or `.xz`.
+- Any nesting of these, for example an `.img.xz` inside a zip.
+
+From a zip, only the chosen entry is read, so a 400 MB download costs the size
+of one image. The page picks the image that a supported device takes, by its
+file name (for the Ascent air unit, `Ascent_H_Sky_<version>.img`). If there are
+several, it takes the newest and says so. If there are none, it lists what the
+archive holds.
+
+zip and gzip are unpacked by the browser itself. xz is unpacked by our own
+decoder in `xz.js`, which handles LZMA2 and the CRC-32, CRC-64 and SHA-256
+checks. The CRC-32 or check of every format is verified.
 
 ## Ascent air unit
 
@@ -96,18 +118,24 @@ not covered.
   OFL.
 - `ascent.js`: the Ascent air unit's protocol, image checks, MD5 and flash
   sequence. It uses no browser APIs, so the tests share it.
+- `archive.js`, `xz.js`, `checksum.js`: opening archives, the xz decoder, and
+  CRC-32 / CRC-64.
 - `test/test.mjs`: unit tests, plus full flashes against a simulated unit
   (`test/sim.mjs`). The simulated unit loses replies, sends junk bytes, splits
   reads and rejects an MD5.
+- `test/archive.test.mjs`: xz, gzip, tar and zip archives made by the real
+  tools, then damaged, nested and empty archives. Setting
+  `VENDOR_ZIP=path/to/the/download.zip` also opens the vendor's own zip.
 
   ```bash
-  node --test test/test.mjs
+  node --test test/test.mjs test/archive.test.mjs
   ```
 
 - `test/browser-check.mjs`: runs the real page in headless Chrome against a
   fake `navigator.serial` (`test/fake-serial.js`). It flashes through the UI
-  twice: once with the port permission kept across the reboots, and once with
-  it lost. It saves screenshots.
+  four times: from the image with the port permission kept across the
+  reboots, from a zip, from an `.img.xz`, and with the permission lost. It
+  saves screenshots.
 
   ```bash
   node test/browser-check.mjs IMG [OUTDIR]

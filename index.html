@@ -110,6 +110,9 @@
   #drop input { position: absolute; opacity: 0; width: 1px; height: 1px; }
   #drop strong { color: var(--accent); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; font-size: 13px; white-space: nowrap; }
   #file-name { font-weight: 600; font-size: 17px; margin-top: 16px; overflow-wrap: anywhere; }
+  #file-status { margin-top: 6px; color: var(--data); font-size: 13px; letter-spacing: 0.08em; }
+  #drop .formats { display: block; margin-top: 4px; font-size: 12.5px; color: color-mix(in srgb, var(--quiet) 75%, transparent); }
+  #drop.loaded .formats { display: none; }
 
   table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
@@ -237,11 +240,13 @@
       <h2><span class="n">02</span>Firmware</h2>
     </div>
     <label id="drop">
-      <input id="file" type="file" accept=".img">
-      Drop a firmware image here, or <strong>choose a file</strong>
+      <input id="file" type="file" accept=".img,.zip,.xz,.gz,.tgz,.txz,.tar">
+      Drop a firmware image or an archive here, or <strong>choose a file</strong>
+      <span class="formats">.img, or a .zip, .xz, .gz or .tar holding one</span>
     </label>
     <div id="file-info" hidden>
       <div id="file-name"></div>
+      <div id="file-status" hidden></div>
       <dl id="file-meta"></dl>
       <table id="sections" hidden>
         <thead><tr><th>Section</th><th>Size</th><th>Offset</th><th>Written</th></tr></thead>

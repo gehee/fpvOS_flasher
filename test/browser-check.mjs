@@ -9,7 +9,8 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -108,14 +109,17 @@ await cdp('Page.addScriptToEvaluateOnNewDocument', {
   source: `window.__fake = { regrant: !location.search.includes('regrant=0') };\n${fake}`,
 });
 
-async function scenario(name, query, { reselect }) {
+async function scenario(name, query, { reselect, file = img }) {
   console.log(`--- ${name}`);
   await cdp('Page.navigate', { url: `${base}${query}` });
   await until("document.readyState === 'complete'", 10000);
   await until("document.querySelector('#unit-status').dataset.kind === 'ok'", 10000, 'auto-connect');
   console.log(`connected: ${await js("document.querySelector('#unit-info').innerText.replace(/\\n/g, ' | ')")}`);
-  await chooseFile(img);
-  await until("!document.querySelector('#file-info').hidden && /[0-9a-f]{32}/.test(document.querySelector('#file-meta').innerText)", 20000, 'image parsed');
+  await chooseFile(file);
+  await until("!document.querySelector('#file-info').hidden && /[0-9a-f]{32}/.test(document.querySelector('#file-meta').innerText)", 30000, 'image parsed');
+  const shown = await js("document.querySelector('#file-meta').innerText.match(/[0-9a-f]{32}/)[0]");
+  if (shown !== imgMd5) throw new Error(`${name}: page shows md5 ${shown}, image is ${imgMd5}`);
+  console.log(`file: ${await js("document.querySelector('#file-name').textContent + ' | ' + document.querySelector('#file-meta').innerText.split('\\n').slice(0, 2).join(' ')")}`);
   await until("!document.querySelector('#flash').disabled", 5000, 'flash enabled');
   console.log(`checks: ${await js("[...document.querySelectorAll('#checks li')].map(l => l.dataset.level + ': ' + l.textContent).join(' / ')")}`);
   await shot(`${name}-ready`);
@@ -183,9 +187,24 @@ async function looks() {
   return fail;
 }
 
+// a zip shaped like the vendor's download, and an .img.xz
+const imgMd5 = createHash('md5').update(fs.readFileSync(img)).digest('hex');
+const zip = path.join(out, 'Firmware_V18.21.10.zip');
+execFileSync('python3', ['-c', `
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED) as z:
+    z.writestr('Firmware_V18.21.10/Readme.txt', 'read me')
+    z.writestr('Firmware_V18.21.10/Ascent_G_Gnd_18_21_10.img', b'ground' * 1000)
+    z.write(sys.argv[2], 'Firmware_V18.21.10/' + sys.argv[3])
+`, zip, img, path.basename(img)]);
+const xzFile = path.join(out, `${path.basename(img)}.xz`);
+fs.writeFileSync(xzFile, execFileSync('xz', ['-c', '-6', img], { maxBuffer: 1 << 30 }));
+
 let failures = [];
 try {
   failures.push(...await scenario('kept', '', { reselect: false }));
+  failures.push(...await scenario('zip', '', { reselect: false, file: zip }));
+  failures.push(...await scenario('xz', '', { reselect: false, file: xzFile }));
   failures.push(...await scenario('lost', '?regrant=0', { reselect: true }));
   failures.push(...await looks());
 } catch (e) {

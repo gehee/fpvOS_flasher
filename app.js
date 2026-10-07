@@ -4,11 +4,13 @@ import {
   CMD, Session, LinkLostError, flashImage, parseAsw, md5hex, deviceKind,
   firmwareVersion, compareVersions, sleep,
 } from './ascent.js';
+import { openFirmware } from './archive.js';
 
 // What the page can flash. The chooser offers only these, and the page lists
-// them; each one's protocol lives in its own module (ascent.js today).
+// them; each one's protocol lives in its own module (ascent.js today). image
+// matches the file names it takes, to pick one out of an archive.
 const DEVICES = [
-  { name: 'Ascent air unit', usbVendorId: 0x1d76 },
+  { name: 'Ascent air unit', usbVendorId: 0x1d76, image: /^Ascent_H_Sky_\d+_\d+_\d+\.img$/i },
 ];
 const FILTERS = DEVICES.map(({ usbVendorId }) => ({ usbVendorId }));
 const isOurs = (port) => DEVICES.some((d) => d.usbVendorId === port.getInfo().usbVendorId);
@@ -232,21 +234,45 @@ function setUnitStatus(kind, text) {
 
 // --------------------------------------------------------------- firmware --
 
+// An image as is, or the one inside a .zip / .xz / .gz / .tar.
 async function loadFile(file) {
   if (!file || state.busy) return;
   state.flashed = null;
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const parsed = parseAsw(bytes, file.name);
+  const current = { file, loading: 'Opening' };
+  state.image = current;
+  render();
+  let opened;
+  try {
+    opened = await openFirmware(file, {
+      wanted: (n) => DEVICES.some((d) => d.image.test(n)),
+      onProgress: (text) => {
+        if (state.image !== current) return;
+        current.loading = text;
+        $('file-status').textContent = `${text}…`;
+      },
+    });
+  } catch (e) {
+    if (state.image !== current) return;
+    state.image = { file, error: e.message };
+    log(`file ${file.name}: ${e.message}`, 'error');
+    render();
+    return;
+  }
+  if (state.image !== current) return;   // another file was dropped meanwhile
+  const { bytes, name, trail, notes } = opened;
+  const parsed = parseAsw(bytes, name);
   const md5 = parsed.errors.length ? null : md5hex(bytes);
-  state.image = { file, bytes, parsed, md5 };
-  log(`file ${file.name}: ${bytes.length} bytes, ${parsed.boardName ?? 'not an image'} ${parsed.versionText ?? ''}`
-    + (md5 ? `, md5 ${md5}` : ''));
+  state.image = { file, bytes, name, trail, notes, parsed, md5 };
+  log(`file ${[...trail, name].join(' > ')}: ${bytes.length} bytes, ${parsed.boardName ?? 'not an image'} `
+    + `${parsed.versionText ?? ''}${md5 ? `, md5 ${md5}` : ''}`);
   render();
 }
 
 // Problems from the image and the unit together: [{level, text}]
 function checks() {
   const out = [];
+  if (state.image?.error) out.push({ level: 'error', text: state.image.error });
+  for (const n of state.image?.notes ?? []) out.push({ level: 'info', text: n });
   const img = state.image?.parsed;
   if (img) {
     for (const e of img.errors) out.push({ level: 'error', text: e });
@@ -398,10 +424,15 @@ function render() {
   const img = state.image;
   $('drop').classList.toggle('loaded', !!img);
   $('file-info').hidden = !img;
-  if (img) {
-    const p = img.parsed;
-    $('file-name').textContent = img.file.name;
+  $('file-status').hidden = !img?.loading;
+  $('file-status').textContent = img?.loading ? `${img.loading}…` : '';
+  const p = img?.parsed;
+  $('file-meta').hidden = !p;
+  $('sections').hidden = !p?.sections.length;
+  if (img) $('file-name').textContent = img.name ?? img.file.name;
+  if (p) {
     const rows = [
+      ['From', img.trail.length ? img.trail.join(' › ') : ''],
       ['Image', p.boardName ?? 'unknown'],
       ['Version', p.versionText ?? ''],
       ['Size', fmtBytes(img.bytes.length)],
@@ -411,7 +442,6 @@ function render() {
       ['Sent as', p.remoteName ?? ''],
     ].filter(([, v]) => v);
     $('file-meta').replaceChildren(...rows.flatMap(([k, v, cls]) => [el('dt', k), el('dd', v, cls)]));
-    $('sections').hidden = !p.sections.length;
     $('sections').querySelector('tbody').replaceChildren(...p.sections.map((s) => {
       const tr = document.createElement('tr');
       tr.append(el('td', s.name), el('td', fmtBytes(s.length), 'num'), el('td', `0x${s.offset.toString(16)}`, 'num'), el('td', s.upgrade ? 'yes' : 'no'));
@@ -440,6 +470,7 @@ function render() {
   }
   $('hint').textContent = !state.link ? 'Connect a device first.'
     : !img ? 'Choose a firmware image.'
+    : img.loading ? 'Unpacking the firmware.'
     : cs.some((c) => c.level === 'error') ? 'Fix the problems above first.'
     : '';
 }
