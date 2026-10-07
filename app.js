@@ -306,7 +306,8 @@ async function flash() {
   const img = state.image;
   if (!canFlash()) return;
   const ok = await ask(`Flash ${img.parsed.remoteName}?`,
-    'The device writes its other flash bank and switches to it. Keep it powered and connected until it restarts.',
+    'The device writes its other flash bank and switches to it. Keep it powered and connected until it restarts. '
+      + 'This flasher is experimental: use it at your own risk.',
     'Flash');
   if (!ok || !canFlash()) return;
 

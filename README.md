@@ -2,6 +2,10 @@
 
 **<https://gehee.github.io/fpvOS_flasher/>**
 
+> **Experimental: use it at your own risk.** The flasher is new and not yet
+> tested on every device and firmware. Flashing can leave a device that has to
+> be recovered by hand.
+
 A web page that flashes FPV devices over USB. It runs in Chrome or Edge on a
 desktop computer (Linux, Windows, macOS) through the Web Serial API. There is
 nothing to install.

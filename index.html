@@ -178,6 +178,15 @@
   .log-error { color: var(--error); }
   .log-debug { color: color-mix(in srgb, var(--quiet) 75%, transparent); }
 
+  .experimental {
+    margin: 0 0 16px; padding: 10px 14px; border-radius: 8px;
+    border-left: 3px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent);
+    color: color-mix(in srgb, var(--warn) 65%, var(--text));
+  }
+  .experimental strong {
+    margin-right: 8px; color: var(--warn);
+    font-weight: 600; font-size: 12.5px; letter-spacing: 0.16em; text-transform: uppercase;
+  }
   .banner {
     padding: 12px 14px; border-radius: 8px; margin-bottom: 16px;
     border-left: 3px solid var(--error); background: color-mix(in srgb, var(--error) 12%, transparent);
@@ -219,6 +228,12 @@
 <main>
   <p class="lead">Flash firmware to FPV devices over USB, straight from the browser.</p>
   <div class="supported"><span class="label">SUPPORTED</span><ul id="devices"></ul></div>
+
+  <div class="experimental" role="note">
+    <strong>Experimental</strong>
+    Use at your own risk. This flasher is new and not yet tested on every device and firmware.
+    Flashing can leave a device that has to be recovered by hand.
+  </div>
 
   <div id="unsupported" class="banner" hidden>
     This browser cannot talk to USB serial devices. Use Chrome or Edge on a desktop computer,
