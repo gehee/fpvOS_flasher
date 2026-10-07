@@ -6,11 +6,16 @@ import {
 } from './ascent.js';
 import { openFirmware } from './archive.js';
 
-// What the page can flash. The chooser offers only these, and the page lists
-// them; each one's protocol lives in its own module (ascent.js today). image
-// matches the file names it takes, to pick one out of an archive.
+// What the page can flash. One entry per kind of device: its USB id (the
+// chooser offers only these), the file names it takes (to pick one out of an
+// archive), and the models it covers, each listed on the page. Each kind's
+// protocol lives in its own module (ascent.js today).
 const DEVICES = [
-  { name: 'Ascent Lite, Ascent Lite+ air unit', usbVendorId: 0x1d76, image: /^Ascent_H_Sky_\d+_\d+_\d+\.img$/i },
+  {
+    models: ['Ascent Lite air unit', 'Ascent Lite+ air unit'],
+    usbVendorId: 0x1d76,
+    image: /^Ascent_H_Sky_\d+_\d+_\d+\.img$/i,
+  },
 ];
 const FILTERS = DEVICES.map(({ usbVendorId }) => ({ usbVendorId }));
 const isOurs = (port) => DEVICES.some((d) => d.usbVendorId === port.getInfo().usbVendorId);
@@ -485,7 +490,7 @@ function el(tag, text, cls) {
 // ------------------------------------------------------------------ wiring --
 
 function init() {
-  $('devices').replaceChildren(...DEVICES.map((d) => el('li', d.name)));
+  $('devices').replaceChildren(...DEVICES.flatMap((d) => d.models).map((m) => el('li', m)));
   render();
   if (!('serial' in navigator)) return;
 
