@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#06202f">
+<title>fpvOS Flasher</title>
+<meta name="description" content="Flash firmware to FPV devices from the browser, over USB.">
+<style>
+  /* The fpvOS face: the goggle HUD's KESTREL theme and Chakra Petch, as on
+     the goggle's own web page (kestrel-gnd webstream.cpp). */
+  @font-face { font-family: Chakra; src: url(fonts/ChakraPetch-Medium.ttf) format("truetype"); font-weight: 500; font-display: swap; }
+  @font-face { font-family: Chakra; src: url(fonts/ChakraPetch-SemiBold.ttf) format("truetype"); font-weight: 600; font-display: swap; }
+
+  :root {
+    color-scheme: dark;
+    --ground: #06202f;
+    --text: #ffffff;
+    --data: #00e5ff;
+    --accent: #b3ff00;
+    --quiet: #8c9eb3;
+    --warn: #ffb021;
+    --error: #ff5a52;
+    --panel: color-mix(in srgb, var(--quiet) 9%, var(--ground));
+    --line: color-mix(in srgb, var(--quiet) 24%, transparent);
+    --sunk: color-mix(in srgb, #000 28%, var(--ground));
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--ground);
+    color: var(--text);
+    font: 500 15px/1.5 Chakra, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  header.top {
+    position: sticky; top: 0; z-index: 5;
+    padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top));
+    background: var(--ground);
+    border-bottom: 1px solid var(--line);
+  }
+  header.top .in { max-width: 728px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+  .brand { font-weight: 600; font-size: 22px; letter-spacing: 0.02em; }
+  .brand b { color: var(--accent); font-weight: 600; }
+  .app { font-weight: 600; font-size: 13px; letter-spacing: 0.22em; color: var(--quiet); margin-top: 3px; }
+
+  main { max-width: 760px; margin: 0 auto; padding: 22px 16px calc(32px + env(safe-area-inset-bottom)); }
+  .lead { margin: 0; color: var(--quiet); }
+  .supported { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 20px; }
+  .supported .label { font-weight: 600; font-size: 12px; letter-spacing: 0.16em; color: var(--quiet); margin-right: 4px; }
+  #devices { display: contents; list-style: none; }
+  #devices li { padding: 2px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13.5px; }
+
+  section.panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px 18px 18px;
+    margin-bottom: 14px;
+  }
+  .panel-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 38px; }
+  .panel-head h2 {
+    flex: 1; margin: 0;
+    font-size: 14px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase;
+  }
+  .panel-head h2 .n { color: var(--accent); margin-right: 10px; }
+
+  button {
+    font: 600 13px Chakra, system-ui, sans-serif;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 9px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid color-mix(in srgb, var(--quiet) 55%, transparent);
+    background: none; color: var(--quiet);
+  }
+  button:hover:not(:disabled) { color: var(--text); border-color: var(--quiet); }
+  button.solid { background: var(--accent); border-color: var(--accent); color: var(--ground); }
+  button.solid:hover:not(:disabled) { color: var(--ground); filter: brightness(1.08); }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+  button.link { border: none; padding: 0; color: var(--accent); font-size: 12px; }
+  :focus-visible { outline: 2px solid var(--data); outline-offset: 2px; }
+
+  /* state words, as on the HUD */
+  #unit-status {
+    display: flex; align-items: center; gap: 9px; margin-top: 6px;
+    font-weight: 600; font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--quiet);
+  }
+  #unit-status::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: currentColor; flex: none; }
+  #unit-status[data-kind="ok"] { color: var(--accent); }
+  #unit-status[data-kind="connecting"] { color: var(--data); }
+  #unit-status[data-kind="error"] {
+    color: var(--error); text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 14px; align-items: baseline;
+  }
+
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 5px 18px; margin: 14px 0 0; }
+  dt { color: var(--quiet); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  dd.good { color: var(--accent); }
+
+  #drop {
+    position: relative; display: block; margin-top: 12px;
+    border: 1.5px dashed var(--line); border-radius: 10px;
+    padding: 22px 16px; text-align: center; color: var(--quiet); cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  #drop:hover, #drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent); }
+  #drop.loaded { padding: 12px 16px; }
+  #drop input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  #drop strong { color: var(--accent); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; font-size: 13px; white-space: nowrap; }
+  #file-name { font-weight: 600; font-size: 17px; margin-top: 16px; overflow-wrap: anywhere; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--quiet); font-weight: 600; font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; }
+  td:first-child { text-transform: uppercase; letter-spacing: 0.08em; }
+  td.num { font-variant-numeric: tabular-nums; }
+
+  #checks { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 8px; }
+  #checks li {
+    padding: 9px 12px; border-radius: 8px;
+    border-left: 3px solid var(--data);
+    background: color-mix(in srgb, var(--data) 8%, transparent);
+  }
+  #checks li[data-level="warn"] { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); color: color-mix(in srgb, var(--warn) 70%, var(--text)); }
+  #checks li[data-level="error"] { border-color: var(--error); background: color-mix(in srgb, var(--error) 12%, transparent); color: color-mix(in srgb, var(--error) 70%, var(--text)); }
+
+  .flash-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+  #flash { padding: 11px 28px; font-size: 14px; }
+  #hint { color: var(--quiet); }
+
+  /* the HUD's segmented track: cyan blocks while running, lime when done */
+  .track {
+    position: relative; height: 14px; margin-top: 18px;
+    background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--quiet) 22%, transparent) 0 12px, transparent 12px 16px);
+  }
+  #bar {
+    height: 100%; width: 0; transition: width 0.25s;
+    background: repeating-linear-gradient(90deg, var(--data) 0 12px, transparent 12px 16px);
+  }
+  #bar[data-state="done"] { background: repeating-linear-gradient(90deg, var(--accent) 0 12px, transparent 12px 16px); }
+  #bar[data-state="failed"] { background: repeating-linear-gradient(90deg, var(--error) 0 12px, transparent 12px 16px); }
+  #stage-text { margin-top: 10px; }
+  #stages {
+    list-style: none; padding: 0; margin: 10px 0 0; display: flex; gap: 6px 20px; flex-wrap: wrap;
+    color: var(--quiet); font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+  }
+  #stages li::before { content: "·"; display: inline-block; width: 1.1em; }
+  #stages li[data-state="active"] { color: var(--accent); }
+  #stages li[data-state="active"]::before { content: "▸"; }
+  #stages li[data-state="done"] { color: var(--data); }
+  #stages li[data-state="done"]::before { content: "✓"; }
+  #result { margin-top: 14px; padding: 10px 12px; border-radius: 8px; border-left: 3px solid; }
+  #result[data-ok="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); }
+  #result[data-ok="false"] { border-color: var(--error); background: color-mix(in srgb, var(--error) 12%, transparent); color: color-mix(in srgb, var(--error) 75%, var(--text)); }
+  #reselect { margin-top: 14px; }
+
+  details summary {
+    cursor: pointer; font-weight: 600; font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--quiet); padding: 2px 0;
+  }
+  details[open] summary { color: var(--text); }
+  details + details { margin-top: 10px; }
+  .log-tools { display: flex; gap: 18px; align-items: center; margin: 12px 0 10px; flex-wrap: wrap; color: var(--quiet); font-size: 13px; }
+  .log-tools label { display: flex; gap: 6px; align-items: center; letter-spacing: 0.1em; text-transform: uppercase; font-size: 12px; font-weight: 600; }
+  input[type="checkbox"] { accent-color: var(--accent); }
+  #log {
+    background: var(--sunk); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; height: 220px; overflow: auto;
+    font: 12.5px/1.5 var(--mono); color: color-mix(in srgb, var(--quiet) 45%, var(--text));
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .log-warn { color: var(--warn); }
+  .log-error { color: var(--error); }
+  .log-debug { color: color-mix(in srgb, var(--quiet) 75%, transparent); }
+
+  .banner {
+    padding: 12px 14px; border-radius: 8px; margin-bottom: 16px;
+    border-left: 3px solid var(--error); background: color-mix(in srgb, var(--error) 12%, transparent);
+    color: color-mix(in srgb, var(--error) 70%, var(--text));
+  }
+  .note { color: var(--quiet); }
+  .note p { margin: 10px 0; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--sunk); padding: 1px 5px; border-radius: 4px; color: var(--text); }
+
+  footer { margin-top: 22px; color: var(--quiet); font-size: 13px; text-align: center; }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  dialog {
+    border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px;
+    background: var(--panel); color: var(--text); max-width: min(460px, calc(100vw - 32px));
+  }
+  dialog::backdrop { background: color-mix(in srgb, #000 55%, transparent); }
+  dialog h3 { margin: 0 0 8px; font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+  dialog p { margin: 0; color: var(--quiet); }
+  .ask-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+  [hidden] { display: none !important; }
+
+  @media (max-width: 520px) {
+    section.panel { padding: 14px; }
+    dl { grid-template-columns: 1fr; gap: 0; }
+    dd { margin-bottom: 8px; }
+    th:nth-child(3), td:nth-child(3) { display: none; }
+  }
+</style>
+</head>
+<body>
+<header class="top"><div class="in">
+  <div class="brand">fpv<b>OS</b></div>
+  <div class="app">FLASHER</div>
+</div></header>
+
+<main>
+  <p class="lead">Flash firmware to FPV devices over USB, straight from the browser.</p>
+  <div class="supported"><span class="label">SUPPORTED</span><ul id="devices"></ul></div>
+
+  <div id="unsupported" class="banner" hidden>
+    This browser cannot talk to USB serial devices. Use Chrome or Edge on a desktop computer,
+    and open this page over <code>https://</code> or <code>http://localhost</code>.
+  </div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2><span class="n">01</span>Device</h2>
+      <button id="connect" class="solid">Connect</button>
+      <button id="disconnect" hidden>Disconnect</button>
+    </div>
+    <div id="unit-status" data-kind="idle"><span>Not connected</span></div>
+    <dl id="unit-info" hidden></dl>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2><span class="n">02</span>Firmware</h2>
+    </div>
+    <label id="drop">
+      <input id="file" type="file" accept=".img">
+      Drop a firmware image here, or <strong>choose a file</strong>
+    </label>
+    <div id="file-info" hidden>
+      <div id="file-name"></div>
+      <dl id="file-meta"></dl>
+      <table id="sections" hidden>
+        <thead><tr><th>Section</th><th>Size</th><th>Offset</th><th>Written</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <ul id="checks" hidden></ul>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2><span class="n">03</span>Flash</h2>
+    </div>
+    <div class="flash-row">
+      <button id="flash" class="solid" disabled>Flash</button>
+      <button id="cancel" hidden>Cancel</button>
+      <span id="hint"></span>
+    </div>
+    <div id="progress" hidden>
+      <div class="track"><div id="bar"></div></div>
+      <div id="stage-text"></div>
+      <ol id="stages">
+        <li>Update mode</li>
+        <li>Send file</li>
+        <li>Write flash</li>
+        <li>Restart</li>
+      </ol>
+      <button id="reselect" class="solid" hidden>Select the device again</button>
+    </div>
+    <div id="result" hidden></div>
+  </section>
+
+  <section class="panel">
+    <details>
+      <summary>Log</summary>
+      <div class="log-tools">
+        <label><input id="verbose" type="checkbox"> Details</label>
+        <button id="copy-log" class="link">Copy</button>
+        <button id="save-log" class="link">Save</button>
+      </div>
+      <div id="log" role="log"></div>
+    </details>
+  </section>
+
+  <section class="panel note">
+    <details>
+      <summary>How it works</summary>
+      <p>The page talks to the updater that already runs on the device, the same one the vendor's
+        PC tool talks to, and checks the image before anything is sent.</p>
+      <p><b>Ascent air unit:</b> the unit reboots into its update system, receives the file, checks
+        its MD5, writes its other flash bank and switches to it. A failed or interrupted transfer
+        leaves the running bank as it was. Power it from the battery or the USB port.</p>
+      <p>Close the vendor's PC tool and any serial terminal first: only one program can use the port.</p>
+      <p>On Linux your user needs access to <code>/dev/ttyACM*</code> (the <code>dialout</code> group),
+        and ModemManager, if it runs, can grab a new serial port for a few seconds.</p>
+    </details>
+    <details>
+      <summary>Advanced</summary>
+      <p><b>Ascent air unit:</b> switch its USB from serial to network (RNDIS) mode. It stays in
+        network mode until it reboots.</p>
+      <button id="netmode" disabled>Switch to network mode</button>
+    </details>
+  </section>
+
+  <footer>
+    <a href="https://github.com/gehee/fpvOS">fpvOS</a> · open firmware for FPV VRX and VTX
+  </footer>
+</main>
+
+<dialog id="ask">
+  <form method="dialog">
+    <h3 id="ask-title"></h3>
+    <p id="ask-text"></p>
+    <div class="ask-buttons">
+      <button value="cancel">Cancel</button>
+      <button value="ok" id="ask-ok" class="solid"></button>
+    </div>
+  </form>
+</dialog>
+<script type="module" src="app.js"></script>
+</body>
+</html>
