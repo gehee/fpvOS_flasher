@@ -1,6 +1,6 @@
 name: pages
 
-# Tests, then publishes the page (index.html, the top-level modules and fonts;
+# Tests, then publishes the page (index.html, application modules and fonts;
 # not the tests) to GitHub Pages, which serves it over https as Web Serial needs.
 # One-time setup: Settings > Pages > Build and deployment > Source: GitHub Actions.
 
@@ -12,8 +12,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 jobs:
   test:
@@ -23,12 +21,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --test test/test.mjs test/archive.test.mjs
+      - run: node --test test/test.mjs test/archive.test.mjs test/profiles.test.mjs test/unlock.test.mjs
+      - name: Browser integration (simulated devices)
+        run: node test/browser-check.mjs
 
   deploy:
     if: github.event_name != 'pull_request'
     needs: test
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     # one deploy at a time; a newer push waits rather than cutting one short
     concurrency:
       group: pages
@@ -40,9 +44,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Site
         run: |
-          mkdir -p _site
+          mkdir -p _site/transports
           cp index.html *.js _site/
-          cp -r fonts _site/
+          cp -r devices stages fonts _site/
+          cp transports/*.js _site/transports/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

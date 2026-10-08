@@ -1,0 +1,5 @@
+# Local firmware fixtures and hardware-test output
+.local/
+
+# Generated GitHub Pages site
+_site/
