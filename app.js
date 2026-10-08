@@ -429,6 +429,8 @@ function render() {
   // firmware
   const img = state.image;
   $('drop').classList.toggle('loaded', !!img);
+  $('drop').classList.toggle('disabled', state.busy);
+  $('file').disabled = state.busy;
   $('file-info').hidden = !img;
   $('file-status').hidden = !img?.loading;
   $('file-status').textContent = img?.loading ? `${img.loading}…` : '';
@@ -501,7 +503,13 @@ function init() {
   $('reselect').onclick = reselect;
   $('flash').onclick = flash;
   $('cancel').onclick = () => { abort?.abort(); log('cancelling after the current step', 'warn'); };
-  $('file').onchange = (e) => loadFile(e.target.files[0]);
+  // cleared after each pick: choosing the same file again fires no change
+  // event otherwise, and the pick would be silently ignored
+  $('file').onchange = (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    loadFile(f);
+  };
   $('verbose').onchange = () => {
     $('log').replaceChildren();
     logLines.forEach(showLogLine);
@@ -525,6 +533,10 @@ function init() {
   };
 
   window.addEventListener('beforeunload', (e) => { if (state.busy) e.preventDefault(); });
+  // a file dropped outside the drop zone (or on it while flashing) would make
+  // the browser open the file and leave the page
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => e.preventDefault());
 
   // plug in = connect, for a unit this page was allowed before
   navigator.serial.addEventListener('connect', (e) => {
