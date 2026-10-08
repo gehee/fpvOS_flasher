@@ -113,6 +113,10 @@
   #file-status { margin-top: 6px; color: var(--data); font-size: 13px; letter-spacing: 0.08em; }
   #drop .formats { display: block; margin-top: 4px; font-size: 12.5px; color: color-mix(in srgb, var(--quiet) 75%, transparent); }
   #drop.loaded .formats { display: none; }
+  .profile-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+  .profile-row label { color: var(--quiet); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
+  select { max-width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--sunk); color: var(--text); font: inherit; }
+  #profile-hint { margin-top: 8px; color: var(--quiet); font-size: 13px; }
 
   table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
@@ -130,6 +134,9 @@
   #checks li[data-level="error"] { border-color: var(--error); background: color-mix(in srgb, var(--error) 12%, transparent); color: color-mix(in srgb, var(--error) 70%, var(--text)); }
 
   .flash-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+  #unlock-options { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+  #unlock-options label { display: flex; align-items: center; gap: 8px; color: var(--accent); }
+  #unlock-hint { margin-top: 6px; color: var(--quiet); font-size: 13px; }
   #flash { padding: 11px 28px; font-size: 14px; }
   #hint { color: var(--quiet); }
 
@@ -254,6 +261,11 @@
     <div class="panel-head">
       <h2><span class="n">02</span>Firmware</h2>
     </div>
+    <div class="profile-row">
+      <label for="profile">Hardware profile</label>
+      <select id="profile"><option value="">Auto · connected device</option></select>
+    </div>
+    <div id="profile-hint"></div>
     <label id="drop">
       <input id="file" type="file" accept=".img,.zip,.xz,.gz,.tgz,.txz,.tar">
       Drop a firmware image or an archive here, or <strong>choose a file</strong>
@@ -275,6 +287,10 @@
     <div class="panel-head">
       <h2><span class="n">03</span>Flash</h2>
     </div>
+    <div id="unlock-options" hidden>
+      <label><input id="unlock-before-flash" type="checkbox"><span id="unlock-label"></span></label>
+      <div id="unlock-hint"></div>
+    </div>
     <div class="flash-row">
       <button id="flash" class="solid" disabled>Flash</button>
       <button id="cancel" hidden>Cancel</button>
@@ -284,6 +300,7 @@
       <div class="track"><div id="bar"></div></div>
       <div id="stage-text"></div>
       <ol id="stages">
+        <li id="stage-unlock" hidden>Unlock VRX</li>
         <li>Update mode</li>
         <li>Send file</li>
         <li>Write flash</li>
@@ -311,17 +328,21 @@
       <summary>How it works</summary>
       <p>The page talks to the updater that already runs on the device, the same one the vendor's
         PC tool talks to, and checks the image before anything is sent.</p>
-      <p><b>Ascent air unit:</b> the unit reboots into its update system, receives the file, checks
-        its MD5, writes its other flash bank and switches to it. A failed or interrupted transfer
-        leaves the running bank as it was. Power it from the battery or the USB port.</p>
+      <p><b>Ascent Lite/Lite+:</b> the unit reboots into its update system, checks the transfer MD5
+        and image CRC, and updates banked components. Boot and environment can be written in place;
+        this is not a whole-system atomic update.</p>
+      <p><b>Standard Ascent VRX:</b> use external DC power and USB. The page checks the signed
+        OTRA container, SHA-256 and the standard VRX RSA key. The receiver applies its own
+        authentication and hardware checks, then writes both single and paired NAND partitions.
+        Persistent application changes may be replaced. VRX Pro and Avatar images need different profiles.</p>
       <p>Close the vendor's PC tool and any serial terminal first: only one program can use the port.</p>
       <p>On Linux your user needs access to <code>/dev/ttyACM*</code> (the <code>dialout</code> group),
         and ModemManager, if it runs, can grab a new serial port for a few seconds.</p>
     </details>
     <details>
       <summary>Advanced</summary>
-      <p><b>Ascent air unit:</b> switch its USB from serial to network (RNDIS) mode. It stays in
-        network mode until it reboots.</p>
+      <p>Ask the connected Ascent updater to enable USB network (RNDIS) mode. The standard VRX
+        already exposes networking alongside serial. An air unit leaves serial mode until it reboots.</p>
       <button id="netmode" disabled>Switch to network mode</button>
     </details>
   </section>
