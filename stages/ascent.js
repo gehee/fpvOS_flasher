@@ -13,7 +13,9 @@ export async function ASCENT_ENTER_UPDATE(ctx) {
 export function VERIFY_UPDATE_MODE(ctx) {
   const { identity } = ctx.profile.meta;
   const current = ctx.runtime.updateInfo;
-  if (!current || !identity.matches(current) || !identity.updateMatches(current, ctx.originalDevice, ctx.runtime.updateMode)) {
+  // The update-mode predicate owns the complete identity check: a clean
+  // updater can report a different model name from its normal-mode firmware.
+  if (!current || !identity.updateMatches(current, ctx.originalDevice, ctx.runtime.updateMode)) {
     throw new Error('The reconnected device does not match the original hardware profile/identity.');
   }
   ctx.runtime.updateVerified = true;
@@ -22,7 +24,7 @@ export function VERIFY_UPDATE_MODE(ctx) {
     ctx.report.log(`Verified ${ctx.profile.meta.name} preflash unlock and clean-mode identity.`);
     ctx.step('unlock', 0.05, `Verified unlocked update daemon (version ${current.sdk})`);
   } else if (!identity.normalMatches(current, ctx.originalDevice)) {
-    ctx.report.log('Clean updater has no factory serial/revisions; matched the documented profile identity.', 'warn');
+    ctx.report.log('Clean updater uses placeholder factory fields; matched the documented profile identity.', 'warn');
   }
   ctx.checkCancelled();
 }
@@ -43,8 +45,9 @@ export async function ASCENT_START_FIRMWARE(ctx) {
 export async function ASCENT_SEND_FIRMWARE(ctx) {
   await sendFileChunks(ctx.session, { bytes: ctx.image.bytes, chunkSize: ctx.plan.chunkSize,
     timeoutMs: ctx.options.dataTimeoutMs ?? ctx.profile.transport.timeouts.data, signal: ctx.signal,
+    allowZeroLength: ctx.profile.transport.allowZeroDataAckLength === true,
     onChunk: ({ index, sent, ack }) => {
-      ctx.report.log(`chunk ${index}: unit has ${ack.cursize}/${ack.totalsize}, status ${ack.status} ${ack.detail}`, 'debug');
+      ctx.report.log(`chunk ${index}: length ${ack.length}, unit has ${ack.cursize}/${ack.totalsize}, status ${ack.status} ${ack.detail}`, 'debug');
       ctx.step('upload', 0.08 + 0.72 * sent / ctx.image.bytes.length,
         `Sending the firmware (${Math.round(100 * sent / ctx.image.bytes.length)}%)`);
     } });
@@ -109,7 +112,8 @@ export function VERIFY_INSTALLED_FIRMWARE(ctx) {
   const after = ctx.runtime.finalInfo;
   if (after) {
     if (!ctx.profile.meta.identity.matches(after) || !ctx.profile.meta.identity.normalMatches(after, ctx.originalDevice)) {
-      throw new Error('The reconnected device does not match the original hardware profile/identity.');
+      const identity = ({ name, hardware, serial }) => JSON.stringify({ name, hardware, serial });
+      throw new Error(`The reconnected device does not match the original hardware profile/identity. Before: ${identity(ctx.originalDevice)}; after: ${identity(after)}.`);
     }
     if (after.firmware !== ctx.image.parsed.remoteName.replace(/\.img$/, '')) {
       throw new Error(`Installed firmware does not match the requested image: ${after.firmware || 'unknown'}.`);

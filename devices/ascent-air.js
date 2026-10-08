@@ -1,6 +1,7 @@
 // Ascent Lite / Lite+ H_Sky firmware layout, selected by the air profile.
 // 128-byte ASW header followed by five components; not the VRX OTRA layout.
 import { crc32 } from '../checksum.js';
+import { ASCENT_TRANSPORT } from '../transports/ascent.js';
 import { aswBoard } from '../firmware.js';
 import { defineDevice, aswImage, sameFactoryIdentity, formatHex } from './common.js';
 import { ASCENT_ENTER_UPDATE, VERIFY_UPDATE_MODE, ASCENT_FLASH_STEPS, ASCENT_POSTFLASH_STEPS } from '../stages/ascent.js';
@@ -71,12 +72,32 @@ export function parseAirImage(bytes, fileName = '') {
 
 const matchesAir = (info) => /^(Ascent_H_Sky|Ascent_Lite(?:_?\+|_plus)?|Ascent_Lite_Plus)$/i.test(info.name ?? '')
   && (!info.firmware || /^Ascent_H_Sky(?:_\d+_\d+_\d+)?$/i.test(info.firmware));
+function airNormalMatches(current, before) {
+  if (!matchesAir(current) || !matchesAir(before)) return false;
+  if (sameFactoryIdentity(current, before)) return true;
+  // Newer Lite firmware changes the presentation of the same factory data.
+  // Limit compatibility to the observed H_Sky/Lite transition, serial prefix,
+  // and trailing 1.0 -> 1.1 report; board and main hardware revision stay exact.
+  const legacy = /^Ascent_H_Sky$/i.test(before.name ?? '') ? before : current;
+  const lite = legacy === before ? current : before;
+  return /^Ascent_H_Sky$/i.test(legacy.name ?? '') && /^Ascent_Lite$/i.test(lite.name ?? '')
+    && !!legacy.serial && (lite.serial === legacy.serial || lite.serial === `1_${legacy.serial}`)
+    && /^FPV-Ascent-Sky-\d+-V\d+\.\d+-\d+\.\d+$/.test(legacy.hardware ?? '')
+    && (lite.hardware === legacy.hardware || legacy.hardware.endsWith('-1.0')
+      && lite.hardware === legacy.hardware.slice(0, -1) + '1');
+}
+// Some air clean updaters replace the model and factory fields with these
+// placeholders. Accept them only after identifying the original air unit.
+const airUpdateMatches = (current, before, phase) => matchesAir(before) && (airNormalMatches(current, before)
+  || phase === 'clean' && current.name === 'Ascent' && current.hardware === 'FPV-Edu-Sky-V0.0-0.0'
+    && current.serial === '' && current.firmware === before.firmware && /^Ascent_H_Sky_\d+_\d+_\d+$/.test(current.firmware ?? '')
+    && current.status === 0 && (current.detail === 'OK' || current.detail === ''));
 
 export const ASCENT_AIR = defineDevice({
   meta: {
     id: 'ascent-air', name: 'Ascent Lite / Lite+ air unit', models: ['Ascent Lite air unit', 'Ascent Lite+ air unit'],
     usb: [{ usbVendorId: 0x1d76, usbProductId: 0x0101 }],
-    identity: { matches: matchesAir, normalMatches: sameFactoryIdentity, updateMatches: sameFactoryIdentity },
+    identity: { matches: matchesAir, normalMatches: airNormalMatches, updateMatches: airUpdateMatches },
     image: aswImage({ prefix: 'Ascent_H_Sky', board: 3, parse: parseAirImage,
       checks: (p) => [['CRC-32', p.crcStored == null ? '' : p.crcStored === p.crcCalc
         ? `OK · ${formatHex(p.crcCalc)}` : `bad: ${formatHex(p.crcStored)} in header, file is ${formatHex(p.crcCalc)}`,
@@ -86,5 +107,6 @@ export const ASCENT_AIR = defineDevice({
       network: 'The air unit leaves serial mode until it reboots, and this page loses it.',
     },
   },
+  transport: Object.freeze({ ...ASCENT_TRANSPORT, allowZeroDataAckLength: true }),
   stages: { preflash: [ASCENT_ENTER_UPDATE, VERIFY_UPDATE_MODE], flash: ASCENT_FLASH_STEPS, postflash: ASCENT_POSTFLASH_STEPS },
 });

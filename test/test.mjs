@@ -137,7 +137,7 @@ test('flash against the simulated unit', async () => {
   assert.deepEqual(order, [CMD.FIND_DEVICE, CMD.REBOOT, CMD.FIND_DEVICE, CMD.REMOTE_UPGRADE, CMD.FILE_START, CMD.FILE_END, CMD.FIND_DEVICE]);
 });
 
-test('flash with real-size chunks (1 MiB) and a 3.5 MiB image', async () => {
+test('air flash accepts zero-length acknowledgments with exact counters across 1 MiB and partial chunks', async () => {
   const img = asw();
   const big = new Uint8Array(3.5 * (1 << 20));
   big.set(img);
@@ -146,7 +146,7 @@ test('flash with real-size chunks (1 MiB) and a 3.5 MiB image', async () => {
   v.setUint32(0x74, big.length, true);
   v.setUint32(0x70, crc32(big.subarray(0x80)), true);
   assert.deepEqual(parseAirImage(big).errors, []);
-  const { unit } = await simFlash({ chunk: 1 << 20 }, big);
+  const { unit } = await simFlash({ chunk: 1 << 20, dataAckLength: 0 }, big);
   assert.equal(Buffer.compare(unit.file.data, Buffer.from(big)), 0);
   assert.equal(unit.file.chunks.length, 4);
 });

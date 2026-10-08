@@ -13,7 +13,9 @@
   const installFailure = params.has('installFailure');
   const VID = type === 'air' ? 0x1d76 : 0x1d75;
   const name = type === 'air' ? 'Ascent_H_Sky' : type === 'vrx' ? 'Ascent_VRX' : 'Ascent_VRX_Pro';
-  let firmware = type === 'air' ? 'Ascent_H_Sky_18_21_10' : `Ascent_G_Gnd_${params.get('fw') ?? '17_5_3'}`;
+  const factory = { name, serial: 'FAKE0001', hardware: type === 'air' ? 'FPV-Ascent-Sky-482-V1.3-1.0'
+    : type === 'vrx' ? 'FPV-Ascent-Gnd-485-V1.2-1.0' : 'HW_V1.0' };
+  let firmware = `${type === 'air' ? 'Ascent_H_Sky' : 'Ascent_G_Gnd'}_${params.get('fw') ?? (type === 'air' ? '18_21_10' : '17_5_3')}`;
   const staged = new Map();
   const fake = window.__fake = Object.assign({ regrant: true, bootMs: 600, log: [] }, window.__fake || {});
   fake.starts = []; fake.rebootPayloads = [];
@@ -91,10 +93,11 @@
       const C = A.CMD;
       if (f.cmd === C.FIND_DEVICE) {
         const current = this.mode === 'unlocked' && !params.has('unlockFails') ? 'Ascent_G_Gnd_0_0_0' : firmware;
+        const airClean = type === 'air' && this.mode === 'clean';
         return this.send(f, this.struct(300, (i32, str) => {
-          i32(0, 1 << 20); str(4, current.split('_').slice(-3).join('.')); str(36, name); i32(100, 51);
-          str(104, current); str(168, type === 'vrx' && this.mode !== 'normal' ? '' : 'FAKE0001');
-          str(200, type === 'vrx' ? this.mode === 'normal' ? 'FPV-Ascent-Gnd-485-V1.2-1.0' : 'FPV-Ascent-Gnd-485-V0.0-0.0' : 'HW_V1.0');
+          i32(0, 1 << 20); str(4, airClean ? '' : current.split('_').slice(-3).join('.')); str(36, airClean ? 'Ascent' : factory.name); i32(100, airClean ? 0 : 51);
+          str(104, current); str(168, airClean || type === 'vrx' && this.mode !== 'normal' ? '' : factory.serial);
+          str(200, airClean ? 'FPV-Edu-Sky-V0.0-0.0' : type === 'vrx' && this.mode !== 'normal' ? 'FPV-Ascent-Gnd-485-V0.0-0.0' : factory.hardware);
           str(236, 'OK');
         }));
       }
@@ -132,7 +135,7 @@
           staged.set(this.file.path, all);
         }
         return this.send(f, this.struct(80, (i32, str) => {
-          i32(0, f.payload.length); i32(4, this.file.got); i32(8, this.file.length);
+          i32(0, type === 'air' ? 0 : f.payload.length); i32(4, this.file.got); i32(8, this.file.length);
           i32(12, rejectData ? -1 : 0); str(16, rejectData ? 'write failed' : 'OK');
         }));
       }
@@ -158,6 +161,11 @@
         }));
         if (!failed && this.status >= 100) {
           firmware = this.nextFirmware;
+          if (type === 'air') {
+            const lite = firmware === 'Ascent_H_Sky_18_21_10';
+            Object.assign(factory, { name: lite ? 'Ascent_lite' : 'Ascent_H_Sky', serial: lite ? '1_FAKE0001' : 'FAKE0001',
+              hardware: `FPV-Ascent-Sky-482-V1.3-${lite ? '1.1' : '1.0'}` });
+          }
           setTimeout(() => reboot('normal'), 50);
         }
         return undefined;

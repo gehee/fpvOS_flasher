@@ -82,7 +82,7 @@ export class SimUnit {
           i32(0, 1 << 20);
           str(4, info.sdk ?? 'v1.0');
           str(36, info.name);
-          i32(100, 48);
+          i32(100, info.cpuTemp ?? 48);
           str(104, info.firmware);
           str(168, info.serial);
           str(200, info.hardware);
@@ -121,8 +121,8 @@ export class SimUnit {
         const cur = this.file.chunks.reduce((n, c) => n + c.length, 0);
         if (!this.file.path.endsWith('.img')) this.staged.set(this.file.path, new Uint8Array(Buffer.concat(this.file.chunks)));
         return this.reply(f, struct(80, ({ i32, str }) => {
-          i32(0, f.payload.length); i32(4, this.opts.badDataCount ? cur + 1 : cur);
-          i32(8, this.file.length); i32(12, this.opts.rejectData ? -1 : 0); str(16, this.opts.rejectData ? 'write failed' : 'OK');
+          i32(0, this.opts.dataAckLength ?? f.payload.length); i32(4, this.opts.badDataCount ? cur + 1 : cur);
+          i32(8, this.file.length + (this.opts.badDataTotal ? 1 : 0)); i32(12, this.opts.rejectData ? -1 : 0); str(16, this.opts.rejectData ? 'write failed' : 'OK');
         }));
       }
       case CMD.FILE_END: {

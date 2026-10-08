@@ -13,6 +13,10 @@ import { airImage, vrxImage, signVrx, TEST_VRX_KEY, VRX_TABLE, VRX_SEGMENTS, sto
 const air = getProfile('ascent-air'), vrx = getProfile('ascent-vrx');
 const airInfo = { name: 'Ascent_H_Sky', firmware: 'Ascent_H_Sky_18_21_10' };
 const vrxInfo = { name: 'Ascent_VRX', firmware: 'Ascent_G_Gnd_17_5_3', hardware: 'FPV-Ascent-Gnd-485-V1.2-1.0' };
+const airCleanInfo = { name: 'Ascent', firmware: 'Ascent_H_Sky_17_5_3', hardware: 'FPV-Edu-Sky-V0.0-0.0',
+  serial: '', sdk: '', cpuTemp: 0, status: 0, detail: 'OK' };
+const airLegacyInfo = { ...airInfo, firmware: airCleanInfo.firmware, hardware: 'FPV-Ascent-Sky-482-V1.3-1.0', serial: 'AIR0001' };
+const airLiteInfo = { ...airInfo, name: 'Ascent_lite', hardware: 'FPV-Ascent-Sky-482-V1.3-1.1', serial: '1_AIR0001' };
 const parse = (bytes) => parseVrx(bytes, 'Ascent_G_Gnd_17_5_8.img', { publicKey: TEST_VRX_KEY });
 
 test('profiles identify standard VRX and air units, never Pro, Avatar or conflicting USB/model identities', () => {
@@ -25,6 +29,85 @@ test('profiles identify standard VRX and air units, never Pro, Avatar or conflic
   assert.equal(profileForDevice(vrxInfo, air.meta.usb[0]), null);
   assert.equal(profileForDevice({ ...vrxInfo, firmware: airInfo.firmware }), null);
   assert.equal(profileForUsb({ usbVendorId: 0x1d75, usbProductId: 2 }), null);
+});
+
+test('air clean identity is accepted only after a matching normal-mode connection', () => {
+  const before = { ...airInfo, firmware: airCleanInfo.firmware, serial: 'AIR0001', hardware: 'HW_V1.0' };
+  assert.equal(profileForDevice(airCleanInfo, air.meta.usb[0]), null);
+  assert.equal(air.meta.identity.normalMatches(airCleanInfo, before), false);
+  assert.equal(air.meta.identity.updateMatches(airCleanInfo, before, 'clean'), true);
+  assert.equal(air.meta.identity.updateMatches({ ...airCleanInfo, detail: '' }, before, 'clean'), true);
+  for (const phase of ['normal', 'unlock']) assert.equal(air.meta.identity.updateMatches(airCleanInfo, before, phase), false);
+  for (const change of [{ name: 'Ascent_VRX' }, { serial: 'OTHER' }, { hardware: 'FPV-Ascent-Gnd-485-V0.0-0.0' },
+    { firmware: 'Ascent_H_Sky_17_5_8' }, { firmware: 'Ascent_G_Gnd_17_5_3' }, { status: -1 }, { detail: 'error' }]) {
+    assert.equal(air.meta.identity.updateMatches({ ...airCleanInfo, ...change }, before, 'clean'), false);
+  }
+  assert.equal(air.meta.identity.updateMatches(airCleanInfo, { ...before, name: 'Ascent' }, 'clean'), false);
+});
+
+test('air clean placeholder permits upload but cannot pass postflash factory verification', async () => {
+  const image = await prepareFirmware(new File([airImage([17, 5, 8])], 'Ascent_H_Sky_17_5_8.img'), { profile: air });
+  for (const retainPlaceholder of [false, true]) {
+    const { unit, link, session, info } = await openSimulatedDevice(air, { firmware: airCleanInfo.firmware, cleanInfo: airCleanInfo });
+    const result = flashFirmware(session, air, image, { info, usbInfo: air.meta.usb[0], progress: ({ stage }) => {
+      if (retainPlaceholder && stage === 'restart') Object.assign(unit.opts, { name: airCleanInfo.name, hardware: airCleanInfo.hardware, serial: '' });
+    } });
+    if (retainPlaceholder) {
+      await assert.rejects(result, /reconnected device/);
+      assert.equal(link.isOpen, false);
+    } else {
+      const after = await result;
+      assert.equal(after.firmware, 'Ascent_H_Sky_17_5_8');
+      assert.equal(after.serial, info.serial);
+      assert.equal(after.hardware, info.hardware);
+      assert.deepEqual(unit.file.data, Buffer.from(image.bytes));
+    }
+    assert.ok(unit.received.includes(CMD.FILE_END));
+  }
+});
+
+test('air factory identity accepts only the known H_Sky/Lite presentation changes', () => {
+  const matches = air.meta.identity.normalMatches;
+  assert.equal(matches(airLiteInfo, airLegacyInfo), true);
+  assert.equal(matches(airLegacyInfo, airLiteInfo), true);
+  assert.equal(matches({ ...airLiteInfo, hardware: airLegacyInfo.hardware }, airLegacyInfo), true);
+  assert.equal(matches({ ...airLiteInfo, serial: airLegacyInfo.serial }, airLegacyInfo), true);
+  for (const change of [{ name: 'Ascent' }, { name: 'Ascent_VRX' }, { serial: '1_OTHER' }, { serial: '2_AIR0001' },
+    { hardware: 'FPV-Ascent-Sky-492-V1.3-1.1' }, { hardware: 'FPV-Ascent-Sky-482-V1.4-1.1' },
+    { hardware: 'FPV-Ascent-Sky-482-V1.3-2.1' }, { hardware: 'FPV-Ascent-Sky-482-V1.3-1.2' }, { hardware: '' }, { serial: '' }]) {
+    assert.equal(matches({ ...airLiteInfo, ...change }, airLegacyInfo), false);
+  }
+  assert.equal(matches({ ...airLiteInfo, hardware: 'HW_V1.0' }, { ...airLegacyInfo, hardware: 'HW_V1.0' }), false);
+});
+
+test('air postflash accepts the Lite identity presentation after an H_Sky upgrade', async () => {
+  const image = await prepareFirmware(new File([airImage()], 'Ascent_H_Sky_18_21_10.img'), { profile: air });
+  const { unit, session, info } = await openSimulatedDevice(air, { ...airLegacyInfo, cleanInfo: airCleanInfo, dataAckLength: 0 });
+  const after = await flashFirmware(session, air, image, { info, progress: ({ stage }) => {
+    if (stage === 'restart') Object.assign(unit.opts, airLiteInfo);
+  } });
+  assert.equal(after.name, airLiteInfo.name);
+  assert.equal(after.serial, airLiteInfo.serial);
+  assert.equal(after.hardware, airLiteInfo.hardware);
+  assert.equal(after.firmware, 'Ascent_H_Sky_18_21_10');
+});
+
+test('air zero-length acknowledgments still reject failed writes and incorrect counts without retrying', async () => {
+  const image = await prepareFirmware(new File([airImage()], 'Ascent_H_Sky_18_21_10.img'), { profile: air });
+  for (const opts of [{ dataAckLength: 0, rejectData: true }, { dataAckLength: 0, badDataCount: true },
+    { dataAckLength: 0, badDataTotal: true }, { dataAckLength: 1 }]) {
+    const { unit, link, session, info } = await openSimulatedDevice(air, opts);
+    await assert.rejects(flashFirmware(session, air, image, { info }), (e) => {
+      assert.match(e.message, /rejected or miscounted chunk/);
+      assert.match(e.message, /status -?\d+/);
+      assert.match(e.message, /length \d+, expected/);
+      assert.match(e.message, /received \d+\/\d+, expected/);
+      return true;
+    });
+    assert.equal(unit.received.filter((c) => c === CMD.FILE_DATA).length, 1);
+    assert.ok(!unit.received.includes(CMD.FILE_END));
+    assert.equal(link.isOpen, false);
+  }
 });
 
 test('profile content recognition selects its own validator independently of filenames', async () => {
@@ -150,10 +233,11 @@ test('VRX profile runs sequential stages and flashes unchanged bytes under canon
 });
 
 test('VRX profile verifies identity after clean reboot before any upload', async () => {
-  const { unit, session, info, image } = await simulatedVrx();
-  unit.opts.serial = 'OTHER';
-  await assert.rejects(flashFirmware(session, vrx, image, { info }), /reconnected device/);
-  assert.ok(!unit.received.includes(CMD.FILE_START));
+  for (const cleanInfo of [{ serial: 'OTHER' }, { name: 'Ascent_H_Sky' }, { firmware: 'Ascent_H_Sky_17_5_3' }]) {
+    const { unit, session, info, image } = await simulatedVrx({ cleanInfo });
+    await assert.rejects(flashFirmware(session, vrx, image, { info }), /reconnected device/);
+    assert.ok(!unit.received.includes(CMD.FILE_START));
+  }
 });
 
 test('VRX accepts only the documented healthy clean-mode placeholder and requires full normal identity afterward', async () => {
@@ -172,7 +256,7 @@ test('VRX accepts only the documented healthy clean-mode placeholder and require
 });
 
 test('VRX rejects bad data status/counts and profile mismatches', async () => {
-  for (const opts of [{ rejectData: true }, { badDataCount: true }]) {
+  for (const opts of [{ rejectData: true }, { badDataCount: true }, { badDataTotal: true }, { dataAckLength: 0 }]) {
     const { unit, session, info, image } = await simulatedVrx(opts);
     await assert.rejects(flashFirmware(session, vrx, image, { info }), /rejected or miscounted chunk/);
     assert.ok(!unit.received.includes(CMD.FILE_END));

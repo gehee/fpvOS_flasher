@@ -73,6 +73,16 @@ test('rejected staging does not arm a selector; cancellation after arming comple
   assert.ok(!r.unit.received.includes(CMD.FILE_END));
 });
 
+test('script staging requires exact chunk lengths even when firmware allows zero-length acknowledgments', async () => {
+  const { unit, session, info, image } = await receiver({ dataAckLength: 0 });
+  const tolerant = { ...profile, transport: { ...profile.transport, allowZeroDataAckLength: true } };
+  await assert.rejects(flashFirmware(session, tolerant, image, { info, unlock: true }), /rejected or miscounted chunk/);
+  assert.equal(unit.starts.length, 1);
+  assert.equal(unit.received.filter((c) => c === CMD.FILE_DATA).length, 1);
+  assert.ok(!unit.received.includes(CMD.REBOOT));
+  assert.ok(!unit.received.includes(CMD.FILE_END));
+});
+
 // Execute the actual generated shell with filesystem paths relocated into a
 // sandbox. Mount and reboot are replaced with command stubs; no host mounts,
 // receiver writes or physical I/O are performed.

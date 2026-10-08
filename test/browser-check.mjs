@@ -236,7 +236,7 @@ try {
   await cdp('Page.addScriptToEvaluateOnNewDocument', {
     source: `window.__fake = { regrant: !location.search.includes('regrant=0') };\n${fake}`,
   });
-  failures.push(...await scenario('kept', '', { reselect: false }));
+  failures.push(...await scenario('kept', '?fw=17_5_3', { reselect: false }));
   failures.push(...await scenario('zip', '', { reselect: false, file: zip }));
   failures.push(...await scenario('xz', '', { reselect: false, file: xzFile }));
   failures.push(...await scenario('lost', '?regrant=0', { reselect: true }));

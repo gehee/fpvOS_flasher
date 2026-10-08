@@ -378,11 +378,13 @@ export const ASCENT_TRANSPORT = Object.freeze({
   protocol: ASCENT_PROTOCOL,
   serial: Object.freeze({ baudRate: 115200, bufferSize: 65536 }),
   maxChunk: 1 << 20,
+  allowZeroDataAckLength: false,
   timeouts: Object.freeze({ request: 8000, retry: 2000, data: 30000,
     updateBoot: 90000, normalBoot: 120000, reboot: 30000, install: 10 * 60000, poll: 500 }),
 });
 
-export async function sendFileChunks(session, { bytes, chunkSize, timeoutMs, signal, strictCrc = false, onChunk = () => {} }) {
+export async function sendFileChunks(session, { bytes, chunkSize, timeoutMs, signal, strictCrc = false,
+  allowZeroLength = false, onChunk = () => {} }) {
   if (!Number.isInteger(chunkSize) || chunkSize < 1) throw new Error('Invalid transfer chunk size.');
   for (let off = 0; off < bytes.length; off += chunkSize) {
     if (signal?.aborted) throw new Error('Cancelled.');
@@ -390,9 +392,13 @@ export async function sendFileChunks(session, { bytes, chunkSize, timeoutMs, sig
     // Never resent: the receiving updater appends each data chunk.
     const f = await session.request(CMD.FILE_DATA, part, { timeoutMs, retryMs: 0 });
     const ack = parseFileAck(f.payload), sent = off + part.length;
-    if (strictCrc && !f.crcOk || ack.status !== 0 || ack.detail !== 'OK' || ack.length !== part.length
+    // Some air updaters leave Length at zero. Their cumulative and total
+    // counters still have to match exactly; staging retains strict lengths.
+    const lengthOk = ack.length === part.length || allowZeroLength && ack.length === 0;
+    if (strictCrc && !f.crcOk || ack.status !== 0 || ack.detail !== 'OK' || !lengthOk
       || ack.cursize !== sent || ack.totalsize !== bytes.length) {
-      throw new Error(`The unit rejected or miscounted chunk ${off / chunkSize + 1}: ${ack.detail || `status ${ack.status}`} (${ack.cursize}/${ack.totalsize}).`);
+      throw new Error(`The unit rejected or miscounted chunk ${off / chunkSize + 1}: status ${ack.status} ${ack.detail || '(no detail)'} `
+        + `(length ${ack.length}, expected ${part.length}${allowZeroLength ? ' or 0' : ''}; received ${ack.cursize}/${ack.totalsize}, expected ${sent}/${bytes.length}${strictCrc && !f.crcOk ? '; bad reply CRC' : ''}).`);
     }
     onChunk({ index: off / chunkSize + 1, sent, ack });
   }

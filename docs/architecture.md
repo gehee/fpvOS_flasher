@@ -29,7 +29,7 @@ Each module in `devices/` exports a profile with three sections:
     unlock: { supported, label, notice }, // optional
     notices: { flash, network },
   },
-  transport: { protocol, serial, maxChunk, timeouts },
+  transport: { protocol, serial, maxChunk, timeouts, allowZeroDataAckLength },
   stages: {
     preflash: [PREPARE_UPDATE_MODE, VERIFY_UPDATE_MODE],
     flash: [START_FIRMWARE, SEND_FIRMWARE, FINALIZE_FIRMWARE, WAIT_INSTALL],
@@ -66,9 +66,13 @@ fixed snapshots; working state belongs in `runtime`.
 
 - Validate the image and connected identity before preparation; verify update
   mode before firmware upload, then factory identity and installed version after reboot.
-- Never resend FILE_DATA. Check acknowledged status and byte counts. Staging
-  requires valid reply CRCs and never sends FILE_END; ordinary firmware replies
-  retain the vendor-compatible CRC warning/acceptance behavior.
+  `identity.updateMatches` checks the complete update-mode identity, including
+  any model-name or factory-field changes; normal-mode matching remains separate.
+- Never resend FILE_DATA. Check acknowledged status and cumulative/total byte
+  counts. Air firmware transfers accept the updater's zero `Length` field via
+  `allowZeroDataAckLength`; other nonmatching lengths are rejected. Staging
+  requires exact chunk lengths and valid reply CRCs, and never sends FILE_END.
+  Ordinary firmware replies retain vendor-compatible CRC warning/acceptance.
 - Complete unlock selector arming and reboot without a cancellation gap.
 - Once firmware FILE_END begins, continue installation monitoring and postflash
   checks even if cancellation is requested.
@@ -87,6 +91,15 @@ fixed snapshots; working state belongs in `runtime`.
 The browser harness supplies the localhost server, Chromium/CDP lifecycle and
 UI helpers. Only `test/browser-check.mjs` installs fake serial; the explicit
 hardware runner keeps native Web Serial.
+
+The air clean updater can report `Ascent` with `FPV-Edu-Sky-V0.0-0.0` and a blank
+serial. This is accepted only during preflash after a supported normal-mode air
+connection, with unchanged H_Sky firmware and healthy status. It is not a normal
+device identity, and postflash still requires the original factory fields.
+Normal-mode checks also accept the observed `Ascent_H_Sky`/`Ascent_lite`
+presentation change: a `1_` serial prefix and trailing hardware report `1.0`/`1.1`.
+The serial identifier, board number and main hardware revision must still match;
+other serial prefixes or hardware changes are not normalized.
 
 ## VRX preparation
 

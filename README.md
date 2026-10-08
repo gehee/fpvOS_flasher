@@ -18,7 +18,7 @@ anything is sent, and the device does the flashing itself.
 
 | Device | Images | Status |
 | --- | --- | --- |
-| Ascent Lite air unit | `Ascent_H_Sky_*.img`, stock or fpvOS | simulated tests only; **not yet on hardware** |
+| Ascent Lite air unit | `Ascent_H_Sky_*.img`, stock or fpvOS | user-confirmed stock upgrade 17.5.3 → 18.21.10; simulated regression coverage |
 | Ascent Lite+ air unit | `Ascent_H_Sky_*.img`, stock or fpvOS | same image and updater as Lite; **not yet on hardware** |
 | Ascent VRX (standard, Proxima-9311) | `Ascent_G_Gnd_*.img`, signed stock ASW/OTRA | hardware-tested upgrades through 18.21.10 and unlocked downgrade to 17.5.8 |
 

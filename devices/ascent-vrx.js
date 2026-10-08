@@ -150,10 +150,10 @@ export const matchesVrxUnlocked = (current, before) => canUnlockVrx(before)
   && current.name === before.name && current.firmware === `Ascent_G_Gnd_${VRX_UNLOCK_VERSION.replaceAll('.', '_')}`
   && current.sdk === VRX_UNLOCK_VERSION && current.serial === '' && current.hardware === cleanHardware
   && current.status === 0 && current.detail === 'OK';
-export const vrxUpdateMatches = (current, before, phase) => phase === 'unlock' ? matchesVrxUnlocked(current, before)
+export const vrxUpdateMatches = (current, before, phase) => matchesVrx(current) && (phase === 'unlock' ? matchesVrxUnlocked(current, before)
   : sameFactoryIdentity(current, before) || phase === 'clean' && !!before.serial && current.serial === '' && hardwareVrx(before)
     && current.hardware === cleanHardware && current.name === before.name && current.firmware === before.firmware
-    && current.status === 0 && current.detail === 'OK';
+    && current.status === 0 && current.detail === 'OK');
 
 export const ASCENT_VRX = defineDevice({
   meta: {
