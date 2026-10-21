@@ -13,12 +13,19 @@ import { openFirmware } from './archive.js';
 const DEVICES = [
   {
     models: ['Ascent Lite air unit', 'Ascent Lite+ air unit'],
+    // the update mode the page reboots it into has the same id
     usbVendorId: 0x1d76,
+    usbProductId: 0x0101,
     image: /^Ascent_H_Sky_\d+_\d+_\d+\.img$/i,
   },
 ];
-const FILTERS = DEVICES.map(({ usbVendorId }) => ({ usbVendorId }));
-const isOurs = (port) => DEVICES.some((d) => d.usbVendorId === port.getInfo().usbVendorId);
+const FILTERS = DEVICES.map(({ usbVendorId, usbProductId }) => ({ usbVendorId, usbProductId }));
+const isOurs = (port) => {
+  const { usbVendorId, usbProductId } = port.getInfo();
+  return DEVICES.some((d) => d.usbVendorId === usbVendorId && d.usbProductId === usbProductId);
+};
+const hex4 = (n) => (n ?? 0).toString(16).padStart(4, '0');
+const usbId = (port) => `${hex4(port.getInfo().usbVendorId)}:${hex4(port.getInfo().usbProductId)}`;
 
 const $ = (id) => document.getElementById(id);
 
@@ -179,13 +186,18 @@ async function openPort(port) {
   state.link = link;
   state.session = new Session(link, log);
   watchLink(link);
+  // which device this is, and whether another one with the same id is
+  // allowed too (the browser does not tell their serial numbers)
+  const same = (await navigator.serial.getPorts().catch(() => [])).filter(isOurs).length;
+  log(`opened the port of USB device ${usbId(port)}${same > 1 ? ` (${same} such devices allowed on this page)` : ''}`);
   try {
     state.info = await state.session.deviceInfo();
     log(`connected: ${state.info.firmware || state.info.name} (hw ${state.info.hardware}, sn ${state.info.serial})`);
     setUnitStatus('ok', 'Connected');
   } catch (e) {
     log(`no answer to FIND_DEVICE: ${e.message}`, 'error');
-    setUnitStatus('error', 'The port opened but the device does not answer. Wait for it to finish booting, then reconnect.');
+    setUnitStatus('error', 'The port opened but the device does not answer. Wait for it to finish booting, then reconnect. '
+      + 'If other USB devices are plugged in (a flight controller, an ESP32 board), unplug them and plug the unit straight into the computer.');
     await link.close();
     state.link = state.session = null;
   }
