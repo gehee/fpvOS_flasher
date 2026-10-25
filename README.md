@@ -6,6 +6,10 @@
 > tested on every device and firmware. Flashing can leave a device that has to
 > be recovered by hand.
 
+**Flashing the fpvOS air image?** The step-by-step guide, with what to expect
+and how to go back to stock, is in
+[fpvOS's install guide](https://github.com/gehee/fpvOS/blob/main/docs/INSTALL.md#flash-the-air-unit-optional).
+
 A web page that flashes FPV devices over USB. It runs in Chrome or Edge on a
 desktop computer (Linux, Windows, macOS) through the Web Serial API. There is
 nothing to install.
@@ -19,8 +23,8 @@ cannot do anything the vendor tool could not.
 
 | Device | Images | Status |
 | --- | --- | --- |
-| Ascent Lite air unit | `Ascent_H_Sky_*.img`, stock or fpvOS | tested against a simulated unit, in Node and in headless Chrome; **not yet on hardware** |
-| Ascent Lite+ air unit | `Ascent_H_Sky_*.img`, stock or fpvOS | as the Lite: the same image and updater; **not yet on hardware** |
+| Ascent Lite air unit | `Ascent_H_Sky_*.img`, stock or fpvOS | **flashed on real hardware** (the fpvOS beta3 air image, 2026-10-08); also tested against a simulated unit, in Node and in headless Chrome |
+| Ascent Lite+ air unit | `Ascent_H_Sky_*.img`, stock or fpvOS | as the Lite: the same image and updater; **not yet on a Lite+** |
 
 A new device needs these changes:
 - an entry in `DEVICES` in `app.js`, which gives its USB vendor id, the image
