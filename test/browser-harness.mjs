@@ -13,7 +13,7 @@ export const PUBLIC_ASSETS = new Set(['index.html', 'app.js', 'flasher.js', 'fir
   'archive.js', 'xz.js', 'checksum.js', 'fonts/ChakraPetch-Medium.ttf', 'fonts/ChakraPetch-SemiBold.ttf']);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function openBrowser({ root, out, permission, onProblem = () => {} }) {
+export async function openBrowser({ root, out, permission, onProblem = () => {}, onEvent = () => {} }) {
   const server = http.createServer((req, res) => {
     const name = new URL(req.url, 'http://localhost').pathname.slice(1) || 'index.html';
     if (!PUBLIC_ASSETS.has(name)) { res.writeHead(404).end(); return; }
@@ -99,6 +99,8 @@ export async function openBrowser({ root, out, permission, onProblem = () => {} 
   try {
     browser = spawn(process.env.CHROME ?? 'google-chrome', ['--headless=new', '--remote-debugging-port=0',
       `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check',
+      // Disposable profiles must not wait for an interactive desktop keyring.
+      '--password-store=basic', '--use-mock-keychain',
       '--disable-renderer-backgrounding', '--window-size=1100,1600', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
     const endpoint = await new Promise((resolve, reject) => {
       let text = '';
@@ -116,6 +118,7 @@ export async function openBrowser({ root, out, permission, onProblem = () => {} 
     socket.onclose = () => rejectPending('Browser connection closed');
     socket.onmessage = (event) => {
       const d = JSON.parse(event.data);
+      if (d.method) onEvent(d);
       if (d.id && pending.has(d.id)) {
         const p = pending.get(d.id); pending.delete(d.id); clearTimeout(p.timer);
         if (d.error) p.reject(new Error(d.error.message)); else p.resolve(d.result);

@@ -91,6 +91,10 @@ fixed snapshots; working state belongs in `runtime`.
 The browser harness supplies the localhost server, Chromium/CDP lifecycle and
 UI helpers. Only `test/browser-check.mjs` installs fake serial; the explicit
 hardware runner keeps native Web Serial.
+Its disposable Chromium profile uses a basic password store to avoid interactive
+desktop-keyring waits. For fpvOS tests, `--fpvos` selects the initial backend;
+`--updater-usb-path` authorizes the native chooser only for one updater at the
+specified Linux USB topology path. Firmware transfer still runs through the UI.
 
 The air clean updater can report `Ascent` with `FPV-Edu-Sky-V0.0-0.0` and a blank
 serial. This is accepted only during preflash after a supported normal-mode air
@@ -162,6 +166,9 @@ chooses an already-authorized generic fpvOS updater. Only its expected VID/PID,
 board/backend identity and `clean RAM mode` readiness are accepted before the
 firmware upload. The backend serial is constant, not unique factory identity:
 the user must select this VRX and disconnect other VRXs. Target-side runtime,
-geometry and GPT checks remain authoritative. Bootstrap is experimental and
-hardware-unvalidated; no backup export is performed. Arbitrary vendor-image
+geometry and GPT checks remain authoritative. Bootstrap is experimental: a hardware
+UI test after official 18.21.10 installation reached RAM preflight but was rejected
+with `unsupported GPT/bank selection; no writes`; stock-to-fpvOS is not validated.
+The official 18.21.10 stock-image UI flash and simulated browser scenarios passed.
+No backup export is performed. Arbitrary vendor-image
 installation and the stock-kernel firmware profile remain unsupported.

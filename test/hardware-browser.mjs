@@ -8,7 +8,6 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { getProfile } from '../devices/index.js';
 import { prepareFirmware } from '../flasher.js';
 import { firmwareVersion, compareVersions } from '../firmware.js';
 import { openBrowser } from './browser-harness.mjs';
@@ -20,6 +19,8 @@ const { values } = parseArgs({ options: {
   firmware: { type: 'string', multiple: true }, output: { type: 'string' },
   'usb-serial': { type: 'string' }, 'device-serial': { type: 'string' },
   'expect-status': { type: 'string' },
+  'fpvos': { type: 'boolean' },
+  'updater-usb-path': { type: 'string' },
 } });
 if ((!values.info && !values.execute) || !values.output || !values['usb-serial']
   || values.execute && (!values['device-serial'] || !values.firmware?.length)) {
@@ -27,6 +28,9 @@ if ((!values.info && !values.execute) || !values.output || !values['usb-serial']
 }
 const expectedStatus = values['expect-status'] == null ? null : Number(values['expect-status']);
 if (values.unlock && !values.execute) throw new Error('--unlock requires --execute.');
+if (values['updater-usb-path'] && (!values.execute || !/^[0-9]+-[0-9]+(?:\.[0-9]+)*$/.test(values['updater-usb-path']))) {
+  throw new Error('--updater-usb-path requires --execute and an exact Linux USB topology path.');
+}
 if (values['selection-only'] && (!values.info || values.execute || !values.firmware?.length)) throw new Error('--selection-only requires --info and firmware files, without --execute.');
 if (expectedStatus != null && (!values.execute || values.firmware?.length !== 1 || !Number.isInteger(expectedStatus) || expectedStatus >= 0)) {
   throw new Error('--expect-status needs one firmware and a negative device status code.');
@@ -34,7 +38,6 @@ if (expectedStatus != null && (!values.execute || values.firmware?.length !== 1 
 if (expectedStatus != null && values.unlock) throw new Error('--expect-status tests normal entry and cannot be combined with --unlock.');
 const out = path.resolve(values.output);
 fs.mkdirSync(out, { recursive: true });
-const profile = getProfile('ascent-vrx');
 const root = fileURLToPath(new URL('..', import.meta.url));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const audit = { started: new Date().toISOString(), realHardware: true, browserTransport: 'native Web Serial',
@@ -43,19 +46,22 @@ const save = () => fs.writeFileSync(path.join(out, 'audit.json'), JSON.stringify
 const report = (text) => console.log(`${new Date().toISOString()} ${text}`);
 for (const file of values.firmware ?? []) {
   const source = fs.readFileSync(file);
-  const image = await prepareFirmware(new File([source], path.basename(file)), { profile });
-  if (image.parsed.errors.length || image.parsed.profileId !== profile.meta.id || !image.md5) {
-    throw new Error(`Invalid VRX firmware ${file}: ${image.parsed.errors.join(' ')}`);
+  const image = await prepareFirmware(new File([source], path.basename(file)));
+  if (image.parsed.errors.length || !['ascent-vrx', 'fpvos-ar9311'].includes(image.parsed.profileId) || !image.md5
+    || image.parsed.kind === 1) {
+    throw new Error(`Invalid or unsupported firmware ${file}: ${image.parsed.errors.join(' ')}`);
   }
   audit.files.push({ source: path.resolve(file), sourceSha256: createHash('sha256').update(source).digest('hex'),
     name: image.name, remoteName: image.parsed.remoteName, version: image.parsed.versionText,
     bytes: image.bytes.length, md5: image.md5, imageSha256: createHash('sha256').update(image.bytes).digest('hex'),
-    bodySha256: image.parsed.shaCalc, hashOk: image.parsed.hashOk, signatureOk: image.parsed.signatureOk });
-  report(`Validated ${image.parsed.remoteName}: SHA-256/RSA OK, ${image.bytes.length} bytes`);
+     bodySha256: image.parsed.shaCalc, hashOk: image.parsed.hashOk, signatureOk: image.parsed.signatureOk,
+     profileId: image.parsed.profileId, bundleSha256: image.parsed.sha256 });
+  report(`Validated ${image.parsed.remoteName}: ${image.parsed.profileId}, ${image.bytes.length} bytes`);
 }
 save();
 
 let harness;
+let serialPrompt;
 // Preserve a partial audit and release only our own browser on interruption.
 // Device-side programming/reboot can continue independently; never cut power.
 for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
@@ -77,16 +83,20 @@ async function chooseFile(file) {
 const screenshot = (name) => harness.screenshot(name);
 
 try {
-  harness = await openBrowser({ root, out, permission: { vendorId: 0x1d75, productId: 0x0101, usbSerial: values['usb-serial'] },
+  harness = await openBrowser({ root, out, permission: { vendorId: values.fpvos ? 0x1d6b : 0x1d75,
+    productId: values.fpvos ? 0x0104 : 0x0101, usbSerial: values['usb-serial'] },
+    onEvent: (event) => { if (event.method === 'DeviceAccess.deviceRequestPrompted') serialPrompt = event.params; },
     onProblem: (text) => { audit.errors.push(text); save(); } });
   audit.browserPid = harness.browserPid; audit.browser = harness.version; audit.origin = harness.origin; save();
+  if (values['updater-usb-path']) await harness.cdp('DeviceAccess.enable');
   await harness.cdp('Page.navigate', { url: `${harness.origin}/` });
   await until("document.querySelector('#unit-status') && document.querySelector('#unit-status').dataset.kind === 'ok'", 20000, 'native serial auto-connect');
   const native = await js("navigator.serial.getPorts.toString().includes('[native code]') && !('__fake' in window)");
   if (!native) throw new Error('Native Web Serial was replaced.');
   audit.initial = await deviceInfo();
   report(`Connected real VRX: ${JSON.stringify(audit.initial)}`);
-  if (audit.initial.Device !== 'Ascent_VRX' || values['device-serial'] && audit.initial.Serial !== values['device-serial']) {
+  if (audit.initial.Device !== (values.fpvos ? 'fpvOS updater' : 'Ascent_VRX')
+    || values['device-serial'] && audit.initial.Serial !== values['device-serial']) {
     throw new Error('The connected receiver does not match the requested device identity.');
   }
   await click('details summary');
@@ -135,6 +145,34 @@ try {
           run.reselectionOffered = true; save();
           report('Port reselection offered; continuing to wait for native automatic reconnect (another application may own the port).');
         }
+        if (values['updater-usb-path'] && !await js("document.querySelector('#reselect').hidden")) {
+          const usb = path.join('/sys/bus/usb/devices', values['updater-usb-path']);
+          const read = (name) => fs.readFileSync(path.join(usb, name), 'utf8').trim();
+          const usbDeadline = Date.now() + 90000;
+          let ready = false;
+          while (Date.now() < usbDeadline) {
+            try {
+              ready = read('idVendor') === '1d6b' && read('idProduct') === '0104' && read('serial') === 'fpvos-ar9311';
+            } catch (e) { if (e.code !== 'ENOENT') throw e; }
+            if (ready) break;
+            await sleep(250);
+          }
+          if (!ready) throw new Error('The RAM updater did not enumerate at the explicitly selected physical USB path. Check the serial bootstrap/preflight log.');
+          const updaters = fs.readdirSync('/sys/bus/usb/devices').filter((name) => {
+            try { return fs.readFileSync(`/sys/bus/usb/devices/${name}/serial`, 'utf8').trim() === 'fpvos-ar9311'; }
+            catch { return false; }
+          });
+          if (updaters.length !== 1) throw new Error('Disconnect other fpvOS receivers before selecting the RAM updater.');
+          serialPrompt = null;
+          await click('#reselect');
+          const deadline = Date.now() + 10000;
+          while (!serialPrompt?.devices.length && Date.now() < deadline) await sleep(100);
+          if (serialPrompt?.devices.length !== 1 || !/AR9311/i.test(serialPrompt.devices[0].name)) {
+            throw new Error('RAM updater chooser must contain exactly one AR9311 device.');
+          }
+          run.selectedUpdater = { usbPath: values['updater-usb-path'], ...serialPrompt.devices[0] }; save();
+          await harness.cdp('DeviceAccess.selectPrompt', { id: serialPrompt.id, deviceId: serialPrompt.devices[0].id });
+        }
         await sleep(500);
       }
       run.result = await js("({ok: document.querySelector('#result').dataset.ok, text: document.querySelector('#result').textContent})");
@@ -155,8 +193,9 @@ try {
         continue;
       }
       if (expectedStatus != null) throw new Error('Expected rejection but the device accepted the update.');
-      if (run.after.Firmware !== file.remoteName.replace(/\.img$/, '') || run.after.Serial !== audit.initial.Serial
-        || run.after.Hardware !== audit.initial.Hardware) throw new Error('Post-flash firmware/identity does not match the requested image.');
+      if (file.bundleSha256 ? run.after.Firmware !== file.bundleSha256 || run.after.Serial !== 'fpvos-ar9311' || run.after.Hardware !== 'Gnd485'
+        : run.after.Firmware !== file.remoteName.replace(/\.img$/, '') || run.after.Serial !== audit.initial.Serial
+          || run.after.Hardware !== audit.initial.Hardware) throw new Error('Post-flash firmware/identity does not match the requested image.');
       report(`VERIFIED ${i + 1}: ${run.after.Firmware}, serial ${run.after.Serial}`);
     }
   }
