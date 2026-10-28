@@ -295,6 +295,7 @@ export class Session {
   #feed(bytes) {
     const before = this.parser.skipped;
     for (const f of this.parser.push(bytes)) {
+      if (this.settings.strictReplies && (!f.crcOk || f.type !== 2)) continue;
       if (!f.crcOk && !this.crcWarned) {
         this.crcWarned = true;
         this.log(`reply ${cmdName(f.cmd)} has a CRC that does not match (accepted, as the PC tool does)`, 'warn');

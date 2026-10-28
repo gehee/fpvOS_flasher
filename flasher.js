@@ -36,6 +36,9 @@ export function evaluateSelection({ info = null, profile = null, image = null, s
   if (info && !profile) issues.push({ level: 'error', text: `Unsupported device identity: ${info.name || info.firmware || 'unknown'}. Supported targets: ${PROFILES.map((p) => p.meta.name).join(', ')}. Selecting a profile cannot override device identity.` });
   if (profile && selectedProfile && profile !== selectedProfile) issues.push({ level: 'error', text: `The selected profile (${selectedProfile.meta.name}) does not match the connected ${profile.meta.name}.` });
   const target = selectedProfile ?? profile;
+  if (profile?.meta.id === 'ascent-vrx' && parsed?.profileId === 'fpvos-ar9311') {
+    issues.push({ level: 'error', text: 'Stock-to-fpvOS RAM bootstrap is not available yet. Boot AR9311 fpvOS recovery through the established U-Boot path before installing this bundle.' });
+  }
   if (target && parsed?.profileId && target.meta.id !== parsed.profileId) issues.push({ level: 'error', text: `This image is for ${getProfile(parsed.profileId).meta.name}, not ${target.meta.name}.` });
   const have = info && profile ? profile.meta.deviceVersion(info) : null;
   const matching = !!profile && parsed?.profileId === profile.meta.id && !parsed.errors.length;

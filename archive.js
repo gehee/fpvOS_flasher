@@ -72,12 +72,15 @@ export async function openFirmware(file, { wanted = () => false, family = () => 
   function choose(entries, archive) {
     const files = entries.filter((e) => !e.name.endsWith('/'));
     let hits = files.filter((e) => wanted(stripCompression(baseName(e.name))));
-    if (!hits.length) hits = files.filter((e) => /\.img$/i.test(stripCompression(e.name)));
+    if (!hits.length) hits = files.filter((e) => /\.(img|fwu)$/i.test(stripCompression(e.name)));
     if (!hits.length) {
       const list = files.slice(0, 8).map((e) => baseName(e.name)).join(', ');
       throw new ArchiveError(`No firmware image in ${archive}${list ? ` (it has ${list}${files.length > 8 ? ', ...' : ''})` : ''}.`);
     }
     if (hits.length > 1) {
+      if (hits.some((e) => /\.fwu$/i.test(stripCompression(e.name)))) {
+        throw new ArchiveError(`${archive} contains multiple update bundles/images; select one explicitly.`);
+      }
       const families = new Set(hits.map((e) => family(stripCompression(baseName(e.name)))).filter(Boolean));
       if (families.size > 1) {
         throw new ArchiveError(`${archive} contains images for different hardware. Connect a device or select a hardware profile first.`);

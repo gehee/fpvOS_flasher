@@ -1,8 +1,9 @@
 // Registry only: each device module owns its metadata, policy and stage list.
 import { ASCENT_AIR } from './ascent-air.js';
 import { ASCENT_VRX } from './ascent-vrx.js';
+import { FPVOS_AR9311 } from './fpvos-ar9311.js';
 
-export const PROFILES = Object.freeze([ASCENT_AIR, ASCENT_VRX]);
+export const PROFILES = Object.freeze([ASCENT_AIR, ASCENT_VRX, FPVOS_AR9311]);
 export const USB_FILTERS = PROFILES.flatMap((p) => p.meta.usb);
 export const getProfile = (id) => PROFILES.find((p) => p.meta.id === id) ?? null;
 export const profileForFileName = (name) => PROFILES.find((p) => p.meta.image.pattern.test(name)) ?? null;

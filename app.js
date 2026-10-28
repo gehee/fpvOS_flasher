@@ -68,9 +68,11 @@ async function openPort(port) {
   state.connecting = true;
   const usbProfile = profileForUsb(port.getInfo());
   const link = new WebSerialLink(port, {
-    acceptPort: (info) => profileForUsb(info) === usbProfile,
+    acceptPort: (info) => profileForUsb(info) === usbProfile
+      || usbProfile.meta.id === 'fpvos-ar9311' && profileForUsb(info)?.meta.id === 'ascent-vrx',
     serial: usbProfile.transport.serial,
-    filters: usbProfile.meta.usb,
+    filters: usbProfile.meta.id === 'fpvos-ar9311'
+      ? [...usbProfile.meta.usb, ...getProfile('ascent-vrx').meta.usb] : usbProfile.meta.usb,
     log,
     onNeedPort: askForPort,
     onPortBack: () => { $('reselect').hidden = true; portRequest = null; },
@@ -226,7 +228,7 @@ async function flash() {
     state.flashed = { ok: true, text: after
       ? `Flashed in ${secs} s. The device now reports ${after.firmware || after.name}.`
       : `Flashed in ${secs} s. The device is restarting; reconnect to check it.` };
-    if (after) { state.info = after; state.unlockOverride = null; }
+    if (after) { state.info = after; state.profile = profileForDevice(after, state.link.port.getInfo()); state.unlockOverride = null; }
     log(state.flashed.text);
   } catch (e) {
     state.flashed = { ok: false, text: e.message };

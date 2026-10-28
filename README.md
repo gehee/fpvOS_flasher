@@ -21,6 +21,7 @@ anything is sent, and the device does the flashing itself.
 | Ascent Lite air unit | `Ascent_H_Sky_*.img`, stock or fpvOS | user-confirmed stock upgrade 17.5.3 → 18.21.10; simulated regression coverage |
 | Ascent Lite+ air unit | `Ascent_H_Sky_*.img`, stock or fpvOS | same image and updater as Lite; **not yet on hardware** |
 | Ascent VRX (standard, Proxima-9311) | `Ascent_G_Gnd_*.img`, signed stock ASW/OTRA | hardware-tested upgrades through 18.21.10 and unlocked downgrade to 17.5.8 |
+| fpvOS AR9311 on standard VRX | full `.fwu` install or original kernel/DTB restoration bundle | recovery-service path; simulated tests only |
 
 **VRX Pro, Avatar, L_Gnd and goggles are not supported profiles.** The standard
 VRX uses board **5 / G_Gnd**.
@@ -30,6 +31,21 @@ stock updater; the page rejects images that do not verify with the pinned key.
 
 Selecting a hardware profile does not override the connected device's identity.
 See [Architecture](docs/architecture.md) for the device-module contract.
+
+### AR9311 custom firmware (in development)
+
+Boot the newer-kernel fpvOS recovery through the established U-Boot RAM-loading
+procedure, connect its USB serial interface, then select `fpvos-ar9311.fwu`.
+The service supports unsigned bundles without version ordering. The page requires
+readback-complete status and verifies the package SHA-256 after reboot. Keep
+external DC power connected: shared kernel/DTB writes are not power-loss atomic.
+
+An original-backup restoration `.fwu` restores the stock kernel/DTB and checks
+stock boot identity. Preserve the original partition backups before installing.
+This is not installation of an arbitrary vendor release. Stock-to-fpvOS USB
+bootstrap and vendor `.img` installation through our updater are **not implemented
+yet**; the existing signed-stock path is unchanged. The stock-kernel/root-only
+`ar9311-vendor` build is not supported.
 
 ## Use
 
@@ -128,7 +144,7 @@ The app is static ES modules with no build step or runtime packages:
 Use Node 22+, Python 3, `xz`, `tar`, and Chrome/Chromium for the full test suite:
 
 ```sh
-node --test test/test.mjs test/archive.test.mjs test/profiles.test.mjs test/unlock.test.mjs
+node --test test/test.mjs test/archive.test.mjs test/profiles.test.mjs test/unlock.test.mjs test/fpvos.test.mjs
 node test/browser-check.mjs
 ```
 

@@ -29,7 +29,7 @@ Each module in `devices/` exports a profile with three sections:
     unlock: { supported, label, notice }, // optional
     notices: { flash, network },
   },
-  transport: { protocol, serial, maxChunk, timeouts, allowZeroDataAckLength },
+  transport: { protocol, serial, maxChunk, timeouts, allowZeroDataAckLength, strictReplies },
   stages: {
     preflash: [PREPARE_UPDATE_MODE, VERIFY_UPDATE_MODE],
     flash: [START_FIRMWARE, SEND_FIRMWARE, FINALIZE_FIRMWARE, WAIT_INSTALL],
@@ -124,3 +124,26 @@ If preparation fails, the script attempts to remove the overlay and reboot.
 An ordinary restart restores the real version after the one-shot selector is
 consumed; an armed selector may require a second restart. The clean daemon may
 acknowledge a serial reboot without restarting, so manual recovery can be needed.
+
+## AR9311 fpvOS recovery service
+
+`devices/fpvos-ar9311.js` validates the full `FPVOSUP1` bundle manifest,
+component policy, lengths, header CRC and component SHA-256 hashes. Kind 0
+contains kernel/DTB/root; kind 1 contains full original kernel/DTB partitions.
+Root-only bundles are rejected even though they share board ID 485. The device
+remains responsible for nested image validation and NAND/layout protections.
+Neither signatures nor version ordering are required by this service.
+
+`stages/fpvos.js` handles its distinct protocol semantics: clean may complete
+without reboot, FileEnd ACK text is not `OK`, state 2 means verification only,
+and only state 4 at 100% permits an explicit reboot. A missing finalization ACK
+is followed by status monitoring, never retransmission. Replies require valid
+CRC and response type. Postboot verification requires the whole bundle SHA-256;
+original-stock restoration instead requires a healthy standard-VRX boot identity.
+Its constant USB serial identifies the backend, not a unique physical unit.
+
+Stock restoration allows USB re-enumeration to the vendor VID/PID. No generic
+stock-to-fpvOS identity transition is accepted yet. That requires a dedicated
+RAM bootstrap, backup export and a stock-environment storage adapter; the current
+new-kernel NAND writer is not a stock bootstrap binary. Arbitrary vendor-image
+installation and the stock-kernel firmware profile remain unsupported.
