@@ -61,19 +61,23 @@ export class WebSerialLink {
     await this.closed;
   }
 
-  async reopen({ timeoutMs = 90000, signal } = {}) {
+  async reopen({ timeoutMs = 90000, signal, filters, acceptPort, requireSelection = false } = {}) {
     await this.close();
+    if (filters) this.filters = filters;
+    if (acceptPort) this.acceptPort = acceptPort;
+    if (requireSelection && !this.onNeedPort) throw new Error('Explicit port selection is required.');
     const start = Date.now();
     let picked = null, asked = false;
     for (;;) {
       if (signal?.aborted) throw new Error('Cancelled.');
       const waited = Date.now() - start;
-      if (!asked && this.onNeedPort && waited > 10000) {
+      if (!asked && this.onNeedPort && (requireSelection || waited > 10000)) {
         asked = true;
         this.onNeedPort().then((p) => { picked = p; });
       }
       if (waited > (asked ? Math.max(timeoutMs, 5 * 60000) : timeoutMs)) throw new Error('The device did not come back.');
-      const ports = (await navigator.serial.getPorts()).filter((p) => this.acceptPort(p.getInfo()));
+      const ports = requireSelection ? [] : (await navigator.serial.getPorts()).filter((p) => this.acceptPort(p.getInfo()));
+      if (picked && !this.acceptPort(picked.getInfo())) { picked = null; asked = false; continue; }
       for (const p of picked ? [picked, ...ports] : ports) {
         if (!this.acceptPort(p.getInfo())) continue;
         try {

@@ -69,8 +69,9 @@ export class NodeSerialLink {
     await this.closed;
   }
 
-  async reopen({ timeoutMs = 90000, signal } = {}) {
+  async reopen({ timeoutMs = 90000, signal, filters } = {}) {
     await this.close();
+    if (filters) this.filters = filters;
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       if (signal?.aborted) throw new Error('Cancelled.');

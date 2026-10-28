@@ -407,8 +407,19 @@ export async function sendFileChunks(session, { bytes, chunkSize, timeoutMs, sig
 
 // Small profile-owned staging files, deliberately without FileEnd (which
 // starts firmware programming). Reset receiving counters separately per file.
-export async function uploadUnfinalized(session, { bytes, remotePath }, { signal, timeoutMs = 8000, chunkSize = 65536 } = {}) {
-  if (!bytes.length || bytes.length > 65536 || !Number.isInteger(chunkSize) || chunkSize < 1) throw new Error('Invalid bounded staging payload/chunk size.');
+export function uploadUnfinalized(session, file, options) {
+  return stageFile(session, file, options, 65536);
+}
+
+export function uploadBootstrapBinary(session, file, options) {
+  if (file.remotePath !== '/usrdata/fpvos-update' || file.bytes.length < 64
+    || ![0x7f, 0x45, 0x4c, 0x46, 2, 1].every((b, i) => file.bytes[i] === b)
+    || file.bytes[18] !== 183 || file.bytes[19] !== 0) throw new Error('Invalid AR9311 bootstrap executable/path.');
+  return stageFile(session, file, options, 2 << 20);
+}
+
+async function stageFile(session, { bytes, remotePath }, { signal, timeoutMs = 8000, chunkSize = 65536 } = {}, limit) {
+  if (!bytes.length || bytes.length > limit || !Number.isInteger(chunkSize) || chunkSize < 1) throw new Error('Invalid bounded staging payload/chunk size.');
   const abort = () => { if (signal?.aborted) throw new Error('Cancelled.'); };
   const checkControl = (f) => {
     if (!f.crcOk || f.payload.length < 68 || i32(f.payload, 0) !== 0 || cstr(f.payload, 4, 64) !== 'OK') {

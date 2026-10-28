@@ -207,7 +207,7 @@ async function flash() {
   const session = state.session, info = state.info, plan = selection();
   const unlock = plan.unlockSelected;
   const ok = await ask(`${unlock ? 'Unlock and flash' : 'Flash'} ${img.parsed.remoteName}?`,
-    `${unlock ? profile.meta.unlock.notice + ' ' : ''}${profile.meta.notices.flash} This flasher is experimental: use it at your own risk.`,
+    `${plan.bootstrapSelected ? 'Upload the experimental RAM updater, then select this VRX’s new USB port. Disconnect other VRXs. No backup export is performed. ' : ''}${unlock ? profile.meta.unlock.notice + ' ' : ''}${plan.executionProfile.meta.notices.flash} This flasher is experimental: use it at your own risk.`,
     unlock ? 'Unlock and flash' : 'Flash');
   if (!ok || !canFlash() || state.image !== img || state.profile !== profile || state.session !== session
     || state.info !== info || selection().unlockSelected !== unlock) return;

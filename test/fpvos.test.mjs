@@ -49,7 +49,7 @@ test('bundle parser rejects corruption, other boards, root-only policy, malforme
   for (const b of cases) assert.ok((await parseFpvosBundle(b)).errors.length);
 });
 
-test('fpvOS service identity excludes stock-kernel backend and cannot enable stock bootstrap', async () => {
+test('fpvOS service identity excludes stock-kernel backend and incomplete stock identities cannot bootstrap', async () => {
   assert.equal(profileForDevice(info, FPVOS_AR9311.meta.usb[0]), FPVOS_AR9311);
   for (const change of [{ serial: 'fpvos-ar9311-vendor' }, { hardware: 'Gnd486' }, { name: 'Ascent_VRX' }, { status: -1 }]) {
     assert.equal(matchesFpvosAr9311({ ...info, ...change }), false);

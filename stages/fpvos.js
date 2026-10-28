@@ -1,6 +1,7 @@
 // fpvOS uses the same framing, but different ACK text, completion and reboot rules.
 import { CMD, rebootPayload, encodeFileStart, parseFileAck, parseUpgradeStatus,
   sendFileChunks, sleep, withTimeout, TimeoutError } from '../transports/ascent.js';
+import { AR9311_BOOTSTRAP } from './ar9311-bootstrap.js';
 
 async function control(ctx, cmd, payload) {
   const f = await ctx.session.request(cmd, payload, { retryMs: 0, timeoutMs: 30000 });
@@ -10,16 +11,18 @@ async function control(ctx, cmd, payload) {
   return new TextDecoder().decode(f.payload.subarray(4)).replace(/\0.*$/s, '');
 }
 
-async function reconnect(ctx) {
+async function reconnect(ctx, usb = ctx.profile.meta.usb) {
   const { session, profile } = ctx;
   await withTimeout(session.link.closed, profile.transport.timeouts.reboot, 'fpvOS did not disconnect for reboot.');
   session.reset();
-  await session.link.reopen({ timeoutMs: profile.transport.timeouts.normalBoot });
+  await session.link.reopen({ timeoutMs: profile.transport.timeouts.normalBoot, filters: usb,
+    acceptPort: (info) => usb.some((u) => u.usbVendorId === info.usbVendorId && u.usbProductId === info.usbProductId) });
   session.attach(session.link);
   return session.deviceInfo({ timeoutMs: 15000 });
 }
 
 export async function FPVOS_PREPARE(ctx) {
+  if (ctx.plan.bootstrapSelected) await AR9311_BOOTSTRAP(ctx);
   ctx.step('clean', 0.02, 'Preparing fpvOS RAM recovery');
   const detail = await control(ctx, CMD.REBOOT, rebootPayload('clean'));
   const info = detail.startsWith('rebooting into ') ? await reconnect(ctx) : await ctx.session.deviceInfo();
@@ -73,7 +76,7 @@ export async function FPVOS_INSTALL(ctx) {
 export async function FPVOS_REBOOT_VERIFY(ctx) {
   ctx.step('restart', 0.98, 'Rebooting and verifying installed firmware');
   await control(ctx, CMD.REBOOT, rebootPayload('reboot'));
-  const after = await reconnect(ctx);
+  const after = await reconnect(ctx, ctx.image.parsed.kind === 1 ? [{ usbVendorId: 0x1d75, usbProductId: 0x0101 }] : ctx.profile.meta.usb);
   if (ctx.image.parsed.kind === 1) {
     // Restoration keeps the stock root and data. No package hash is reported by stock.
     if (after.name !== 'Ascent_VRX' || !/^Ascent_G_Gnd_\d+_\d+_\d+$/.test(after.firmware)

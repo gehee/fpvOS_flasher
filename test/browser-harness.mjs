@@ -7,7 +7,9 @@ import { spawn } from 'node:child_process';
 
 export const PUBLIC_ASSETS = new Set(['index.html', 'app.js', 'flasher.js', 'firmware.js',
   'devices/index.js', 'devices/common.js', 'devices/ascent-air.js', 'devices/ascent-vrx.js', 'devices/fpvos-ar9311.js',
-  'stages/ascent.js', 'stages/vrx-unlock.js', 'stages/fpvos.js', 'transports/ascent.js', 'transports/web-serial.js',
+  'stages/ascent.js', 'stages/vrx-unlock.js', 'stages/fpvos.js', 'stages/ar9311-bootstrap.js', 'transports/ascent.js', 'transports/web-serial.js',
+  'assets/ar9311-updater/v1/manifest.json', 'assets/ar9311-updater/v1/fpvos-update-ar9311',
+  'assets/ar9311-updater/v1/bootstrap.sh', 'assets/ar9311-updater/COPYING',
   'archive.js', 'xz.js', 'checksum.js', 'fonts/ChakraPetch-Medium.ttf', 'fonts/ChakraPetch-SemiBold.ttf']);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -15,7 +17,8 @@ export async function openBrowser({ root, out, permission, onProblem = () => {} 
   const server = http.createServer((req, res) => {
     const name = new URL(req.url, 'http://localhost').pathname.slice(1) || 'index.html';
     if (!PUBLIC_ASSETS.has(name)) { res.writeHead(404).end(); return; }
-    res.writeHead(200, { 'content-type': name.endsWith('.js') ? 'text/javascript' : name.endsWith('.html') ? 'text/html' : 'font/ttf' });
+    res.writeHead(200, { 'content-type': name.endsWith('.js') ? 'text/javascript' : name.endsWith('.html') ? 'text/html'
+      : name.endsWith('.json') ? 'application/json' : name.endsWith('.ttf') ? 'font/ttf' : 'application/octet-stream' });
     fs.createReadStream(path.join(root, name)).on('error', (e) => res.destroy(e)).pipe(res);
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });

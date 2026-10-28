@@ -34,17 +34,22 @@ See [Architecture](docs/architecture.md) for the device-module contract.
 
 ### AR9311 custom firmware (in development)
 
-Boot the newer-kernel fpvOS recovery through the established U-Boot RAM-loading
-procedure, connect its USB serial interface, then select `fpvos-ar9311.fwu`.
+On a healthy standard VRX running stock 17.5.3, 17.5.8 or 18.21.10, select a full
+`fpvos-ar9311.fwu` bundle. The browser verifies and stages its bundled RAM updater
+and tiny launcher, arms the one-shot clean hook, and reboots. **Disconnect other
+VRXs and explicitly select this unit's new RAM-updater USB port when asked.**
+This initial USB bootstrap is experimental and has **not been hardware-validated**.
+No host backup export is performed. The established U-Boot RAM-loading route
+remains available, and an already-running fpvOS system uses built-in recovery.
 The service supports unsigned bundles without version ordering. The page requires
 readback-complete status and verifies the package SHA-256 after reboot. Keep
 external DC power connected: shared kernel/DTB writes are not power-loss atomic.
 
 An original-backup restoration `.fwu` restores the stock kernel/DTB and checks
 stock boot identity. Preserve the original partition backups before installing.
-This is not installation of an arbitrary vendor release. Stock-to-fpvOS USB
-bootstrap and vendor `.img` installation through our updater are **not implemented
-yet**; the existing signed-stock path is unchanged. The stock-kernel/root-only
+This is not installation of an arbitrary vendor release. Vendor `.img`
+installation through our updater is **not implemented yet**; the existing
+signed-stock path is unchanged. The stock-kernel/root-only
 `ar9311-vendor` build is not supported.
 
 ## Use
@@ -144,7 +149,7 @@ The app is static ES modules with no build step or runtime packages:
 Use Node 22+, Python 3, `xz`, `tar`, and Chrome/Chromium for the full test suite:
 
 ```sh
-node --test test/test.mjs test/archive.test.mjs test/profiles.test.mjs test/unlock.test.mjs test/fpvos.test.mjs
+node --test test/test.mjs test/archive.test.mjs test/profiles.test.mjs test/unlock.test.mjs test/fpvos.test.mjs test/bootstrap.test.mjs
 node test/browser-check.mjs
 ```
 

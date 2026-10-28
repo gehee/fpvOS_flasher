@@ -142,8 +142,26 @@ CRC and response type. Postboot verification requires the whole bundle SHA-256;
 original-stock restoration instead requires a healthy standard-VRX boot identity.
 Its constant USB serial identifies the backend, not a unique physical unit.
 
-Stock restoration allows USB re-enumeration to the vendor VID/PID. No generic
-stock-to-fpvOS identity transition is accepted yet. That requires a dedicated
-RAM bootstrap, backup export and a stock-environment storage adapter; the current
-new-kernel NAND writer is not a stock bootstrap binary. Arbitrary vendor-image
+Stock restoration allows USB re-enumeration to the vendor VID/PID. A full kind-0
+bundle can also select the stock-to-fpvOS bootstrap operation on a healthy,
+explicitly supported stock identity. The plan retains the source profile for
+connection validation and selects the fpvOS execution profile for its stage arrays.
+`FPVOS_PREPARE` runs `AR9311_BOOTSTRAP` internally when that fixed plan requests it;
+there is no alternate workflow language or independent unlock configuration.
+
+`assets/ar9311-updater/v1/` contains the embedded-tools updater and matching tiny
+launcher, with source provenance and file hashes. `stages/ar9311-bootstrap.js`
+pins the manifest SHA-256 and checks all assets before any upload. A dedicated
+bounded binary-staging primitive permits this ELF up to 2 MiB; ordinary text
+staging retains its 64 KiB limit. Neither staging path sends FileEnd. After the
+selector is armed, ordinary reboot/reconnect finishes even if cancellation was
+requested; cancellation is honored before uploading firmware to the new service.
+
+The bootstrap explicitly prompts for a new USB port and never automatically
+chooses an already-authorized generic fpvOS updater. Only its expected VID/PID,
+board/backend identity and `clean RAM mode` readiness are accepted before the
+firmware upload. The backend serial is constant, not unique factory identity:
+the user must select this VRX and disconnect other VRXs. Target-side runtime,
+geometry and GPT checks remain authoritative. Bootstrap is experimental and
+hardware-unvalidated; no backup export is performed. Arbitrary vendor-image
 installation and the stock-kernel firmware profile remain unsupported.

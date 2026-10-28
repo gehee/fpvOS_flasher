@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { airImage, vrxImage, storedZip } from './fixtures.mjs';
 import { openBrowser, PUBLIC_ASSETS } from './browser-harness.mjs';
+import { crc32 } from '../checksum.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = process.argv[3] ?? fs.mkdtempSync(path.join(os.tmpdir(), 'flasher-check-'));
@@ -30,7 +31,7 @@ async function connectedPage(query = '') {
   await until("document.readyState === 'complete' && document.querySelector('#unit-info') && !document.querySelector('#unit-info').hidden", 10000, 'auto-connect');
 }
 
-async function scenario(name, query, { reselect, file = img, source = img, profile = 'ascent-air', unlock = false }) {
+async function scenario(name, query, { reselect, file = img, source = img, profile = 'ascent-air', unlock = false, bootstrap = false }) {
   console.log(`--- ${name}`);
   await connectedPage(query);
   await chooseFile(file);
@@ -38,7 +39,7 @@ async function scenario(name, query, { reselect, file = img, source = img, profi
   const shown = await js("[...document.querySelectorAll('#file-meta dt')].find(e => e.textContent === 'MD5').nextElementSibling.textContent");
   const expectedMd5 = createHash('md5').update(fs.readFileSync(source)).digest('hex');
   if (shown !== expectedMd5) throw new Error(`${name}: page shows md5 ${shown}, image is ${expectedMd5}`);
-  if (!await js(`document.querySelector('#profile-hint').textContent.includes(${JSON.stringify(profile === 'ascent-vrx' ? 'Ascent VRX' : 'Ascent Lite')})`)) {
+  if (!await js(`document.querySelector('#profile-hint').textContent.includes(${JSON.stringify(profile === 'ascent-vrx' ? 'Ascent VRX' : profile === 'fpvos-ar9311' ? 'fpvOS AR9311' : 'Ascent Lite')})`)) {
     throw new Error(`${name}: wrong detected hardware profile`);
   }
   await until("!document.querySelector('#flash').disabled", 5000, 'flash enabled');
@@ -52,6 +53,7 @@ async function scenario(name, query, { reselect, file = img, source = img, profi
   const notice = await js("document.querySelector('#ask-text').textContent");
   if (profile === 'ascent-vrx' && !/external DC power/.test(notice)) throw new Error('VRX confirmation lacks its power/update policy');
   if (unlock && !/0\.0\.0/.test(notice)) throw new Error('unlock confirmation lacks the version overlay policy');
+  if (bootstrap && !/RAM updater/.test(notice)) throw new Error('bootstrap confirmation lacks its experimental preparation policy');
   await shot(`${name}-confirm`);
   await js("document.querySelector('#ask-ok').click()");
   let reselects = 0;
@@ -82,11 +84,13 @@ async function scenario(name, query, { reselect, file = img, source = img, profi
   if (r.ok !== 'true') fail.push(`result: ${r.result}`);
   if (!r.md5ok) fail.push('unit md5 check failed');
   if (r.mode !== 'normal') fail.push(`unit ends in ${r.mode} mode`);
-  if (reselect && r.requested < 2) fail.push(`expected 2 reselects, got ${r.requested}`);
+  if (reselect && r.requested < (bootstrap ? 1 : 2)) fail.push(`missing port reselection (${r.requested})`);
   if (!reselect && r.requested) fail.push('asked for the port without need');
   const expectedName = path.basename(source);
   if (r.remotePath !== `/tmp/pc/${expectedName}`) fail.push(`wrong remote filename: ${r.remotePath}`);
   if (unlock && (r.starts.length !== 3 || r.reboots[0] !== 'normal' || r.cmds.filter(c => /FILE_END/.test(c)).length !== 1)) fail.push('unlock staging/reboot/update trigger order was wrong');
+  if (bootstrap && (r.starts.length !== 4 || r.starts[0] !== '/usrdata/fpvos-update' || r.starts[1] !== '/usrdata/fpvos-bootstrap.sh'
+    || r.reboots[0] !== 'normal' || r.cmds.filter(c => /FILE_END/.test(c)).length !== 1)) fail.push('bootstrap staging/reboot/update trigger order was wrong');
   return fail;
 }
 
@@ -219,6 +223,12 @@ const syntheticVrx = path.join(out, 'Ascent_G_Gnd_17_5_8.img');
 fs.writeFileSync(syntheticVrx, vrxImage());
 const syntheticBundle = path.join(out, 'synthetic-mixed.zip');
 fs.writeFileSync(syntheticBundle, storedZip([[path.basename(img), fs.readFileSync(img)], [path.basename(syntheticVrx), fs.readFileSync(syntheticVrx)]]));
+const fwu = path.join(out, 'fpvos.fwu');
+const fwuHeader = Buffer.alloc(512), fwuParts = ['kernel','dtb','root'].map((s) => Buffer.from(s));
+fwuHeader.write('FPVOSUP1'); [1,485,525,3].forEach((n,i) => fwuHeader.writeUInt32LE(n,8+i*4)); fwuHeader.write('browser-test',24);
+fwuParts.forEach((p,i) => { const at=96+104*i; fwuHeader.write(['kernel.img','ascent-gnd485.dtb','rootfs.cpio.uboot'][i],at);
+  fwuHeader.writeUInt32LE(p.length,at+32); fwuHeader.write(createHash('sha256').update(p).digest('hex'),at+36); });
+fwuHeader.writeUInt32LE(crc32(fwuHeader),508); fs.writeFileSync(fwu,Buffer.concat([fwuHeader,...fwuParts]));
 
 const harness = await openBrowser({ root, out });
 const { cdp, evaluate: js, until, screenshot: shot, chooseFile, problems } = harness;
@@ -240,6 +250,8 @@ try {
   failures.push(...await scenario('zip', '', { reselect: false, file: zip }));
   failures.push(...await scenario('xz', '', { reselect: false, file: xzFile }));
   failures.push(...await scenario('lost', '?regrant=0', { reselect: true }));
+  failures.push(...await scenario('stock-to-fpvos', '?device=vrx&fw=18_21_10', { reselect: true, file:fwu, source:fwu, profile:'ascent-vrx', bootstrap:true }));
+  failures.push(...await scenario('fpvos-update', '?device=fpvos', { reselect:false, file:fwu, source:fwu, profile:'fpvos-ar9311' }));
   failures.push(...await rejectedProfile('vrx-rejects-air', '?device=vrx', img));
   failures.push(...await rejectedProfile('pro-cannot-be-forced', '?device=pro', img, 'ascent-vrx'));
   failures.push(...await rejectedProfile('vrx-rejects-untrusted-signature', '?device=vrx', syntheticVrx));

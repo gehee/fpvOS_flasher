@@ -4,10 +4,12 @@ import { compareVersions } from './firmware.js';
 import { openFirmware } from './archive.js';
 import { md5hex } from './transports/ascent.js';
 import { formatBytes } from './devices/common.js';
+import { supportsAr9311Bootstrap } from './stages/ar9311-bootstrap.js';
 
 export async function prepareFirmware(file, { profile = null, onProgress = () => {} } = {}) {
   const opened = await openFirmware(file, {
-    wanted: (name) => profile ? profile.meta.image.pattern.test(name) : !!profileForFileName(name),
+    wanted: (name) => profile ? profile.meta.image.pattern.test(name)
+      || profile.meta.id === 'ascent-vrx' && getProfile('fpvos-ar9311').meta.image.pattern.test(name) : !!profileForFileName(name),
     family: (name) => profileForFileName(name)?.meta.id, onProgress,
   });
   const imageProfile = profileForImage(opened.bytes);
@@ -36,21 +38,26 @@ export function evaluateSelection({ info = null, profile = null, image = null, s
   if (info && !profile) issues.push({ level: 'error', text: `Unsupported device identity: ${info.name || info.firmware || 'unknown'}. Supported targets: ${PROFILES.map((p) => p.meta.name).join(', ')}. Selecting a profile cannot override device identity.` });
   if (profile && selectedProfile && profile !== selectedProfile) issues.push({ level: 'error', text: `The selected profile (${selectedProfile.meta.name}) does not match the connected ${profile.meta.name}.` });
   const target = selectedProfile ?? profile;
-  if (profile?.meta.id === 'ascent-vrx' && parsed?.profileId === 'fpvos-ar9311') {
-    issues.push({ level: 'error', text: 'Stock-to-fpvOS RAM bootstrap is not available yet. Boot AR9311 fpvOS recovery through the established U-Boot path before installing this bundle.' });
+  const bootstrapRequested = profile?.meta.id === 'ascent-vrx' && parsed?.profileId === 'fpvos-ar9311' && parsed.kind === 0;
+  const bootstrapSelected = bootstrapRequested && supportsAr9311Bootstrap(info);
+  if (bootstrapRequested) {
+    issues.push(bootstrapSelected
+      ? { level: 'warn', text: 'Experimental stock-to-fpvOS bootstrap: stages the bundled RAM updater and changes USB identity. Disconnect other VRXs and explicitly select this unit’s RAM updater. Shared kernel/DTB writes are not power-loss atomic. No backup export is performed.' }
+      : { level: 'error', text: 'The bundled bootstrap requires a healthy normal-mode standard VRX on stock 17.5.3, 17.5.8 or 18.21.10.' });
   }
-  if (target && parsed?.profileId && target.meta.id !== parsed.profileId) issues.push({ level: 'error', text: `This image is for ${getProfile(parsed.profileId).meta.name}, not ${target.meta.name}.` });
+  if (target && parsed?.profileId && target.meta.id !== parsed.profileId && !(bootstrapRequested && target === profile)) issues.push({ level: 'error', text: `This image is for ${getProfile(parsed.profileId).meta.name}, not ${target.meta.name}.` });
   const have = info && profile ? profile.meta.deviceVersion(info) : null;
-  const matching = !!profile && parsed?.profileId === profile.meta.id && !parsed.errors.length;
+  const matching = !!profile && (parsed?.profileId === profile.meta.id || bootstrapSelected) && !parsed.errors.length;
   const comparison = matching && have && parsed.version ? compareVersions(parsed.version, have) : null;
   const downgrade = comparison != null && comparison < 0;
   if (downgrade) issues.push({ level: 'warn', text: `The image (${parsed.versionText}) is older than the device's ${have.join('.')}. The device may refuse it.` });
   if (comparison === 0) issues.push({ level: 'info', text: `Same version number as the device (${have.join('.')}).` });
-  const unlockAvailable = !!profile?.meta.unlock?.supported(info);
+  const unlockAvailable = !bootstrapRequested && !!profile?.meta.unlock?.supported(info);
   const automaticUnlock = unlockAvailable && matching && downgrade && (!selectedProfile || selectedProfile === profile);
   const unlockSelected = unlockAvailable && (unlockOverride ?? automaticUnlock);
   const maxChunk = profile?.transport.maxChunk ?? 0;
-  return Object.freeze({ profile, issues: Object.freeze(issues), downgrade, unlockAvailable, automaticUnlock, unlockSelected,
+  const executionProfile = bootstrapSelected ? getProfile('fpvos-ar9311') : profile;
+  return Object.freeze({ profile, executionProfile, bootstrapSelected, issues: Object.freeze(issues), downgrade, unlockAvailable, automaticUnlock, unlockSelected,
     currentVersion: have, canFlash: !!(info && profile && matching && image.md5 && !issues.some((c) => c.level === 'error')),
     chunkSize: info?.maxChunk > 0 ? Math.min(info.maxChunk, maxChunk) : maxChunk });
 }
@@ -60,6 +67,7 @@ export async function flashFirmware(session, profile, image, { info, usbInfo, un
   const plan = evaluateSelection({ info, profile, image, unlockOverride: unlock });
   if (!plan.canFlash || profileForDevice(info, usbInfo)?.meta !== profile?.meta) throw new Error('A validated image and matching connected hardware profile are required.');
   if (unlock && !plan.unlockAvailable) throw new Error('Preflash unlock is not supported for this connected hardware/firmware.');
+  profile = plan.executionProfile;
   for (const name of ['preflash', 'flash', 'postflash']) {
     if (!Array.isArray(profile.stages[name]) || !profile.stages[name].length || profile.stages[name].some((step) => typeof step !== 'function')) {
       throw new Error(`Invalid ${name} stage array.`);
