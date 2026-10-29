@@ -93,8 +93,13 @@ UI helpers. Only `test/browser-check.mjs` installs fake serial; the explicit
 hardware runner keeps native Web Serial.
 Its disposable Chromium profile uses a basic password store to avoid interactive
 desktop-keyring waits. For fpvOS tests, `--fpvos` selects the initial backend;
-`--updater-usb-path` authorizes the native chooser only for one updater at the
-specified Linux USB topology path. Firmware transfer still runs through the UI.
+`--usb-path` checks its physical connection. Stock bootstrap tests use
+`--updater-usb-path` and `--xvfb-chooser` inside `xvfb-run` with
+`FPVOS_XVFB_CHOOSER=1` (requires xdotool and Python Pillow). This operates the real
+Serial chooser; CDP DeviceAccess does not expose it. Exactly one updater is allowed.
+Restoration tests additionally require `--restore-stock` and explicit expected
+stock USB serial, device serial, hardware and firmware. All transfers run through
+the unmodified UI and native Web Serial; no serial API is substituted.
 
 The air clean updater can report `Ascent` with `FPV-Edu-Sky-V0.0-0.0` and a blank
 serial. This is accepted only during preflash after a supported normal-mode air
@@ -153,7 +158,7 @@ connection validation and selects the fpvOS execution profile for its stage arra
 `FPVOS_PREPARE` runs `AR9311_BOOTSTRAP` internally when that fixed plan requests it;
 there is no alternate workflow language or independent unlock configuration.
 
-`assets/ar9311-updater/v1/` contains the embedded-tools updater and matching tiny
+`assets/ar9311-updater/v2/` contains the embedded-tools updater and matching tiny
 launcher, with source provenance and file hashes. `stages/ar9311-bootstrap.js`
 pins the manifest SHA-256 and checks all assets before any upload. A dedicated
 bounded binary-staging primitive permits this ELF up to 2 MiB; ordinary text
@@ -166,9 +171,15 @@ chooses an already-authorized generic fpvOS updater. Only its expected VID/PID,
 board/backend identity and `clean RAM mode` readiness are accepted before the
 firmware upload. The backend serial is constant, not unique factory identity:
 the user must select this VRX and disconnect other VRXs. Target-side runtime,
-geometry and GPT checks remain authoritative. Bootstrap is experimental: a hardware
-UI test after official 18.21.10 installation reached RAM preflight but was rejected
-with `unsupported GPT/bank selection; no writes`; stock-to-fpvOS is not validated.
-The official 18.21.10 stock-image UI flash and simulated browser scenarios passed.
+geometry and GPT checks remain authoritative. The stock updater alternates banks;
+the bank-aware kernel and updater share a strict GPT decoder, preserving the active
+stock root read-only and storing fpvOS in the other bank without changing GPT.
+Legacy fixed-bank fpvOS bundles are refused when stock uses `userapp1`.
+The initial fixed-bank preflight and chroot PATH failures are fixed in `v2`.
+Hardware UI installation from official 18.21.10 passed with either stock bank
+selected, including postboot bundle SHA-256, read-only active-stock mapping,
+and unchanged stock-root/GPT checks. UI kernel/DTB restoration returned to
+stock 18.21.10 with verified factory identity; the restored image payloads match
+the official release. The official vendor `.img` stock-to-stock route also passed.
 No backup export is performed. Arbitrary vendor-image
 installation and the stock-kernel firmware profile remain unsupported.

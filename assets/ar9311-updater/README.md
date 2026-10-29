@@ -1,10 +1,13 @@
 # AR9311 RAM updater
 
-`v1/` contains matching outputs from the fpvOS source commit recorded in its
+`v2/` contains matching bank-aware outputs from the fpvOS source commit recorded in its
 manifest. The updater embeds BusyBox and preparation helpers. The launcher is
 only the stock clean-hook entry. No firmware image is bundled here.
 
-These artifacts are experimental and have not been hardware-validated. Never
+`v1/` is retained as a historical artifact; the app only loads pinned `v2` assets.
+`v2` was hardware-tested through the web UI from stock 18.21.10 with either bank
+selected, including stock restoration. Updates remain experimental and shared
+kernel/DTB writes are not power-loss atomic. Never
 send vendor FileEnd for either staging file, including the executable (>1 MiB).
 
 To update, copy a tested build into a new version directory, record its source

@@ -8,12 +8,12 @@ import { spawn } from 'node:child_process';
 export const PUBLIC_ASSETS = new Set(['index.html', 'app.js', 'flasher.js', 'firmware.js',
   'devices/index.js', 'devices/common.js', 'devices/ascent-air.js', 'devices/ascent-vrx.js', 'devices/fpvos-ar9311.js',
   'stages/ascent.js', 'stages/vrx-unlock.js', 'stages/fpvos.js', 'stages/ar9311-bootstrap.js', 'transports/ascent.js', 'transports/web-serial.js',
-  'assets/ar9311-updater/v1/manifest.json', 'assets/ar9311-updater/v1/fpvos-update-ar9311',
-  'assets/ar9311-updater/v1/bootstrap.sh', 'assets/ar9311-updater/COPYING',
+  'assets/ar9311-updater/v2/manifest.json', 'assets/ar9311-updater/v2/fpvos-update-ar9311',
+  'assets/ar9311-updater/v2/bootstrap.sh', 'assets/ar9311-updater/COPYING',
   'archive.js', 'xz.js', 'checksum.js', 'fonts/ChakraPetch-Medium.ttf', 'fonts/ChakraPetch-SemiBold.ttf']);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function openBrowser({ root, out, permission, onProblem = () => {}, onEvent = () => {} }) {
+export async function openBrowser({ root, out, permission, headless = true, onProblem = () => {} }) {
   const server = http.createServer((req, res) => {
     const name = new URL(req.url, 'http://localhost').pathname.slice(1) || 'index.html';
     if (!PUBLIC_ASSETS.has(name)) { res.writeHead(404).end(); return; }
@@ -28,8 +28,8 @@ export async function openBrowser({ root, out, permission, onProblem = () => {},
     fs.mkdirSync(path.join(profile, 'Default'));
     fs.writeFileSync(path.join(profile, 'Default', 'Preferences'), JSON.stringify({
       profile: { content_settings: { exceptions: { serial_chooser_data: {
-        [`${origin},*`]: { setting: { 'chosen-objects': [{ name: 'Sirius', vendor_id: permission.vendorId,
-          product_id: permission.productId, serial_number: permission.usbSerial }] },
+        [`${origin},*`]: { setting: { 'chosen-objects': (Array.isArray(permission) ? permission : [permission]).map((p) =>
+          ({ name: 'Sirius', vendor_id: p.vendorId, product_id: p.productId, serial_number: p.usbSerial })) },
         last_modified: String(BigInt(Date.now()) * 1000n + 11644473600000000n) },
       } } } },
     }));
@@ -97,7 +97,7 @@ export async function openBrowser({ root, out, permission, onProblem = () => {},
     fs.writeFileSync(path.join(out, `${name}.png`), Buffer.from(data, 'base64'));
   };
   try {
-    browser = spawn(process.env.CHROME ?? 'google-chrome', ['--headless=new', '--remote-debugging-port=0',
+    browser = spawn(process.env.CHROME ?? 'google-chrome', [...(headless ? ['--headless=new'] : []), '--remote-debugging-port=0',
       `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check',
       // Disposable profiles must not wait for an interactive desktop keyring.
       '--password-store=basic', '--use-mock-keychain',
@@ -118,7 +118,6 @@ export async function openBrowser({ root, out, permission, onProblem = () => {},
     socket.onclose = () => rejectPending('Browser connection closed');
     socket.onmessage = (event) => {
       const d = JSON.parse(event.data);
-      if (d.method) onEvent(d);
       if (d.id && pending.has(d.id)) {
         const p = pending.get(d.id); pending.delete(d.id); clearTimeout(p.timer);
         if (d.error) p.reject(new Error(d.error.message)); else p.resolve(d.result);
