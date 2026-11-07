@@ -85,6 +85,23 @@ jobs:
           if git rev-parse -q --verify refs/tags/preview >/dev/null; then
             publish refs/tags/preview _site/preview
           fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Firmware
+        # every fpvOS release's images, newest first, for the page's firmware
+        # choice: a browser cannot download them from the release page (no CORS
+        # on GitHub's asset host), so they are published next to the pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f tools/make-catalog.mjs ]; then echo "no catalog tool in this commit"; exit 0; fi
+          for tag in $(gh release list -R gehee/fpvOS --exclude-drafts -L 20 --json tagName -q '.[].tagName'); do
+            mkdir -p "$RUNNER_TEMP/fw/$tag"
+            gh release download "$tag" -R gehee/fpvOS -D "$RUNNER_TEMP/fw/$tag" -p '*.img' -p '*.fwu' || continue
+            node tools/make-catalog.mjs --release "$tag" --out _site/firmware "$RUNNER_TEMP/fw/$tag"/*
+          done
+          if [ -d _site/firmware ] && [ -d _site/preview ]; then cp -r _site/firmware _site/preview/; fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

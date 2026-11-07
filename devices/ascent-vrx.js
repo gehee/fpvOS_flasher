@@ -2,7 +2,7 @@
 // ASW board 5 prefix + modern 256-byte OTRA header, SHA-256 and RSA-2048.
 // Layout and trust key verified against stock 17.5.8 and live VRX 17.5.3.
 import { firmwareVersion } from '../firmware.js';
-import { defineDevice, aswImage, sameFactoryIdentity } from './common.js';
+import { defineDevice, aswImage, sameFactoryIdentity, stockFirmware } from './common.js';
 import { VRX_PREPARE_UPDATE_MODE, VRX_UNLOCK_VERSION } from '../stages/vrx-unlock.js';
 import { VERIFY_UPDATE_MODE, ASCENT_FLASH_STEPS, ASCENT_POSTFLASH_STEPS } from '../stages/ascent.js';
 
@@ -159,6 +159,7 @@ export const ASCENT_VRX = defineDevice({
   meta: {
     id: 'ascent-vrx', name: 'Ascent VRX · Stock', models: ['Ascent VRX · Stock'],
     usb: [{ usbVendorId: 0x1d75, usbProductId: 0x0101 }],
+    describe: (info) => ({ model: 'Caddx Ascent VRX', fpvos: false, firmware: stockFirmware(info) }),
     identity: { matches: matchesVrx, normalMatches: sameFactoryIdentity, updateMatches: vrxUpdateMatches },
     image: aswImage({ prefix: 'Ascent_G_Gnd', board: 5, parse: parseVrx, capacity: true,
       checks: (p) => [

@@ -6,3 +6,9 @@ _site/
 
 # Python helper caches
 __pycache__/
+
+# Release images published for the Install button (tools/make-catalog.mjs)
+firmware/
+
+# Test builds offered by a page served from the build computer (a folder or a link)
+test-firmware

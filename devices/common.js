@@ -4,6 +4,10 @@ import { ASCENT_TRANSPORT } from '../transports/ascent.js';
 export const sameFactoryIdentity = (current, before) => (!before.serial || current.serial === before.serial)
   && (!before.hardware || current.hardware === before.hardware);
 export const formatBytes = (n) => n >= 1 << 20 ? `${(n / (1 << 20)).toFixed(2)} MiB` : `${(n / 1024).toFixed(1)} KiB`;
+export const stockFirmware = (info) => {
+  const v = firmwareVersion(info.firmware);
+  return v ? `stock firmware ${v.join('.')}` : 'stock firmware';
+};
 export const formatHex = (n) => `0x${n.toString(16).padStart(8, '0')}`;
 
 export function aswImage({ prefix, board, parse, checks, capacity = false }) {
@@ -14,7 +18,9 @@ export function aswImage({ prefix, board, parse, checks, capacity = false }) {
 
 export function defineDevice({ meta, transport = ASCENT_TRANSPORT, stages }) {
   return Object.freeze({
-    meta: Object.freeze({ ...meta, deviceVersion: meta.deviceVersion ?? ((info) => firmwareVersion(info.firmware)) }),
+    meta: Object.freeze({ ...meta, deviceVersion: meta.deviceVersion ?? ((info) => firmwareVersion(info.firmware)),
+      // what the page calls the connected unit, and whether it already runs fpvOS
+      describe: meta.describe ?? ((info) => ({ model: meta.name, fpvos: false, firmware: stockFirmware(info) })) }),
     transport,
     stages: Object.freeze(Object.fromEntries(['preflash', 'flash', 'postflash'].map((name) => [name, Object.freeze([...stages[name]])]))),
   });

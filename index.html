@@ -48,7 +48,26 @@
   .app { font-weight: 600; font-size: 13px; letter-spacing: 0.22em; color: var(--quiet); margin-top: 3px; }
 
   main { max-width: 760px; margin: 0 auto; padding: 22px 16px calc(32px + env(safe-area-inset-bottom)); }
+  h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
   .lead { margin: 0; color: var(--quiet); }
+  button.big { padding: 13px 34px; font-size: 15px; }
+  #start > button.big { margin: 4px 0 6px; }
+  #help { margin-top: 16px; }
+  .tips { margin: 10px 0 12px; padding-left: 20px; color: var(--quiet); display: grid; gap: 6px; }
+  .tips b, .note b { color: var(--text); font-weight: 600; }
+  #p1-preparation { margin-top: 8px; color: var(--quiet); }
+  #device-name { font-size: 20px; letter-spacing: 0.02em; text-transform: none; }
+  #device-firmware { color: var(--data); margin-top: 2px; }
+  #action { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 20px; text-align: center; }
+  #keep-plugged { margin: 10px 0 0; color: var(--warn); font-size: 13.5px; }
+  #progress #cancel { margin-top: 14px; }
+  #result-log { display: block; margin-top: 10px; }
+  #unit-more { margin-top: 16px; }
+  section.quiet { background: none; }
+  #developer h3 { margin: 18px 0 4px; font-size: 13px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; }
+  #developer { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  #developer h3 { margin-top: 0; }
+  .note { color: var(--quiet); margin: 4px 0 0; }
   .supported { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 20px; }
   .supported .label { font-weight: 600; font-size: 12px; letter-spacing: 0.16em; color: var(--quiet); margin-right: 4px; }
   #devices { display: contents; list-style: none; }
@@ -62,6 +81,7 @@
     margin-bottom: 14px;
   }
   .panel-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 38px; }
+  .panel-head > div { flex: 1; min-width: 0; }
   .panel-head h2 {
     flex: 1; margin: 0;
     font-size: 14px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase;
@@ -105,23 +125,47 @@
   dd { margin: 0; overflow-wrap: anywhere; }
   dd.good { color: var(--accent); }
 
-  #drop {
-    position: relative; display: block; margin-top: 12px;
-    border: 1.5px dashed var(--line); border-radius: 10px;
-    padding: 22px 16px; text-align: center; color: var(--quiet); cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
+  #choose { display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; margin-top: 16px; }
+  #choose label { color: var(--quiet); font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+  .picker { position: relative; flex: 1 1 220px; min-width: 0; }
+  #release-button {
+    position: relative; width: 100%; padding: 9px 44px 9px 12px; text-align: left;
+    font: 500 15px Chakra, system-ui, sans-serif; letter-spacing: 0; text-transform: none;
+    color: var(--text); background: var(--sunk); border: 1px solid var(--line); border-radius: 8px;
+    display: flex; align-items: center; gap: 10px; white-space: nowrap;
   }
-  #drop:hover, #drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent); }
-  #drop.loaded { padding: 12px 16px; }
-  #drop.disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
-  #drop input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-  #drop strong { color: var(--accent); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; font-size: 13px; white-space: nowrap; }
-  #file-name { font-weight: 600; font-size: 17px; margin-top: 16px; overflow-wrap: anywhere; }
+  .picker .name { flex: 1 1 auto; min-width: 0; }
+  #release-button .name { overflow: hidden; text-overflow: ellipsis; }
+  #release-list .name { white-space: normal; overflow-wrap: anywhere; }
+  .picker .name small { display: block; margin-top: 2px; color: var(--quiet); font-size: 12px; }
+  #release-button:hover:not(:disabled) { border-color: var(--quiet); color: var(--text); }
+  #release-button::after {
+    content: ""; position: absolute; right: 18px; top: 50%; width: 7px; height: 7px;
+    border-right: 2px solid var(--quiet); border-bottom: 2px solid var(--quiet);
+    transform: translateY(-75%) rotate(45deg); transition: transform 0.15s;
+  }
+  #release-button[aria-expanded="true"]::after { transform: translateY(-25%) rotate(-135deg); }
+  #release-list {
+    position: absolute; z-index: 10; left: 0; right: 0; top: calc(100% + 6px);
+    margin: 0; padding: 6px; list-style: none; max-height: 280px; overflow: auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 12px 28px color-mix(in srgb, #000 45%, transparent);
+  }
+  #release-list li {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 6px; cursor: pointer;
+  }
+  #release-list li.active { background: color-mix(in srgb, var(--data) 12%, transparent); }
+  #release-list li[aria-selected="true"] { color: var(--accent); }
+  #release-list li[aria-selected="true"]::before { content: "✓"; width: 1em; flex: none; }
+  #release-list li:not([aria-selected="true"])::before { content: ""; width: 1em; flex: none; }
+  .tag {
+    flex: none; margin-left: auto; padding: 1px 7px; border: 1px solid var(--line); border-radius: 5px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--quiet);
+  }
+  .tag + .tag { margin-left: 0; }
+  #image-details { margin-top: 12px; }
+  #file-name { font-weight: 600; font-size: 16px; margin-top: 12px; overflow-wrap: anywhere; }
   #file-status { margin-top: 6px; color: var(--data); font-size: 13px; letter-spacing: 0.08em; }
-  #drop .formats { display: block; margin-top: 4px; font-size: 12.5px; color: color-mix(in srgb, var(--quiet) 75%, transparent); }
-  #drop.loaded .formats { display: none; }
-  .profile-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
-  .profile-row label { color: var(--quiet); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
   select { max-width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--sunk); color: var(--text); font: inherit; }
   #profile-hint { margin-top: 8px; color: var(--quiet); font-size: 13px; }
 
@@ -131,14 +175,14 @@
   td:first-child { text-transform: uppercase; letter-spacing: 0.08em; }
   td.num { font-variant-numeric: tabular-nums; }
 
-  #checks { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 8px; }
-  #checks li {
+  .checks { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 8px; }
+  .checks li {
     padding: 9px 12px; border-radius: 8px;
     border-left: 3px solid var(--data);
     background: color-mix(in srgb, var(--data) 8%, transparent);
   }
-  #checks li[data-level="warn"] { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); color: color-mix(in srgb, var(--warn) 70%, var(--text)); }
-  #checks li[data-level="error"] { border-color: var(--error); background: color-mix(in srgb, var(--error) 12%, transparent); color: color-mix(in srgb, var(--error) 70%, var(--text)); }
+  .checks li[data-level="warn"] { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); color: color-mix(in srgb, var(--warn) 70%, var(--text)); }
+  .checks li[data-level="error"] { border-color: var(--error); background: color-mix(in srgb, var(--error) 12%, transparent); color: color-mix(in srgb, var(--error) 70%, var(--text)); }
 
   .flash-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
   #unlock-options { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
@@ -146,6 +190,19 @@
   #unlock-hint { margin-top: 6px; color: var(--quiet); font-size: 13px; }
   #flash { padding: 11px 28px; font-size: 14px; }
   #hint { color: var(--quiet); }
+  .notice {
+    margin-top: 14px; padding: 10px 14px; border-radius: 8px;
+    border-left: 3px solid var(--data); background: color-mix(in srgb, var(--data) 9%, transparent);
+  }
+  .notice button { margin-left: 10px; }
+  #start-note { margin: 14px 0 6px; }
+  #advanced { margin-top: 16px; }
+  #device-mode { margin-top: 12px; display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; }
+  #device-mode .label { color: var(--quiet); font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+  .segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 3px; background: var(--sunk); }
+  .segmented button { border: none; padding: 7px 18px; border-radius: 6px; }
+  .segmented button[aria-checked="true"] { background: var(--data); color: var(--ground); opacity: 1; }
+  #device-mode-note { flex-basis: 100%; margin: 0; color: var(--quiet); font-size: 13.5px; }
 
   /* the HUD's segmented track: cyan blocks while running, lime when done */
   .track {
@@ -206,11 +263,10 @@
     border-left: 3px solid var(--error); background: color-mix(in srgb, var(--error) 12%, transparent);
     color: color-mix(in srgb, var(--error) 70%, var(--text));
   }
-  .note { color: var(--quiet); }
-  .note p { margin: 10px 0; }
   code { font-family: var(--mono); font-size: 0.88em; background: var(--sunk); padding: 1px 5px; border-radius: 4px; color: var(--text); }
 
   footer { margin-top: 22px; color: var(--quiet); font-size: 13px; text-align: center; }
+  main a { color: var(--accent); }
   footer a { color: var(--accent); text-decoration: none; }
   footer a:hover { text-decoration: underline; }
 
@@ -240,9 +296,6 @@
 </div></header>
 
 <main>
-  <p class="lead">Flash firmware to FPV devices over USB, straight from the browser.</p>
-  <div class="supported"><span class="label">SUPPORTED</span><ul id="devices"><li>Ascent Lite / Lite+</li><li>Ascent VRX</li><li>BETAFPV P1 Air</li></ul></div>
-
   <div class="experimental" role="note">
     <strong>Experimental</strong>
     Use at your own risk. This flasher is new and not yet tested on every device and firmware.
@@ -254,22 +307,21 @@
     and open this page over <code>https://</code> or <code>http://localhost</code>.
   </div>
 
-  <section class="panel">
-    <div class="panel-head">
-      <h2><span class="n">01</span>Device</h2>
-      <button id="connect" class="solid">Connect</button>
-      <button id="disconnect" hidden>Disconnect</button>
-    </div>
-    <div id="unit-status" data-kind="idle"><span>Not connected</span></div>
-    <dl id="unit-info" hidden></dl>
-    <details id="p1-preparation">
-      <summary>Installing fpvOS on a stock BETAFPV P1?</summary>
-      <p>Let the stock P1 finish starting after power-on, then click <strong>Connect</strong> above and pick its
-        Sirius port: the flasher recognises a stock P1 and starts the restart below for you. You can also run the
-        steps by hand here. Keep external power connected and disconnect other Artosyn devices.</p>
+  <!-- Nothing connected: one button, and help for when the device is not found. -->
+  <section class="panel" id="start">
+    <h1>Install fpvOS on your device</h1>
+    <p class="lead">Plug your device into this computer with a USB cable, then press Connect.</p>
+    <div class="supported"><span class="label">SUPPORTED</span><ul id="devices"><li>Caddx Ascent Lite / Lite+</li></ul></div>
+    <!-- The VRX and P1 Air are detected and flashed as before, but not listed until their path is proven on hardware. -->
+    <div id="start-note" class="notice" hidden></div>
+    <button id="connect" class="solid big">Connect</button>
+    <!-- shown once Connect finds a stock P1: it needs preparing before fpvOS can go on -->
+    <details id="p1-preparation" hidden>
+      <summary>Prepare a stock BETAFPV P1 Air</summary>
+      <p>This P1 runs its stock firmware: it needs this preparation before fpvOS can be installed. The page
+        has started step 1 for you. Keep external power connected and disconnect other Artosyn devices.</p>
       <p>The same P1 appears as a serial port, a USB bootloader, then a recovery serial
-        port. Your browser asks for permission for each USB mode. Once fpvOS is installed, Connect reaches it
-        directly and this panel is not needed again.</p>
+        port. Your browser asks for permission for each one.</p>
       <p><label><input id="p1-stock-confirm" type="checkbox">
         This is a standard P1 Air with stock firmware 1.0.44. Other stock versions
         and P1 AIO models are not supported.</label></p>
@@ -282,70 +334,118 @@
       <p id="p1-browser-support" hidden>Stock preparation requires desktop Chrome or Edge
         with Web Serial and WebHID.</p>
       <p id="p1-preparation-status" role="status" aria-live="polite">After recovery starts,
-        click Connect above, select the P1 Air serial port, choose your firmware below and click Flash.</p>
+        press Connect and select the P1 Air serial port.</p>
       <button id="p1-preparation-cancel" hidden>Cancel preparation</button>
       <p>Preparation runs in RAM; it does not replace the bootloader. Tested on Linux Chromium;
         Windows and macOS are not yet verified. Linux may need USB/HID permissions:
         <a href="assets/p1-updater/README.txt" target="_blank" rel="noopener">setup and recovery guide</a>.</p>
     </details>
+    <details id="help">
+      <summary>My device isn't found</summary>
+      <ul class="tips">
+        <li>Close the vendor's PC tool and any serial terminal: only one program can use the device.</li>
+        <li>Plug the device straight into the computer, and unplug other USB devices such as a flight controller or an ESP32 board.</li>
+        <li><b>Linux:</b> your user needs access to <code>/dev/ttyACM*</code> (the <code>dialout</code> group), and ModemManager can hold a new port for a few seconds.</li>
+      </ul>
+    </details>
   </section>
 
-  <section class="panel">
+  <!-- Connected: what it is, what it runs, and the one thing to do. -->
+  <section class="panel" id="device" hidden>
     <div class="panel-head">
-      <h2><span class="n">02</span>Firmware</h2>
+      <div>
+        <h2 id="device-name"></h2>
+        <div id="device-firmware"></div>
+      </div>
+      <button id="disconnect">Disconnect</button>
     </div>
-    <div class="profile-row">
-      <label for="profile">Hardware profile</label>
-      <select id="profile"><option value="">Auto · connected device</option></select>
+    <div id="unit-status" data-kind="idle"><span>Not connected</span></div>
+    <!-- A unit found in update mode (an interrupted install, say): one way out. -->
+    <div id="update-mode" class="notice" hidden>
+      This unit is in update mode: its radio and app are off.
+      <button id="mode-restart">Restart normally</button>
     </div>
-    <div id="profile-hint"></div>
-    <label id="drop">
-      <input id="file" type="file" accept=".img,.fwu,.zip,.xz,.gz,.tgz,.txz,.tar">
-      Drop a firmware image or an archive here, or <strong>choose a file</strong>
-      <span class="formats">.img, .fwu, or a .zip, .xz, .gz or .tar holding one</span>
-    </label>
-    <div id="file-info" hidden>
-      <div id="file-name"></div>
-      <div id="file-status" hidden></div>
-      <dl id="file-meta"></dl>
-      <table id="sections" hidden>
-        <thead><tr><th>Section</th><th>Size</th><th>Offset</th><th>Written</th></tr></thead>
-        <tbody></tbody>
-      </table>
+    <!-- What to flash: a published release (newest first) or a file of your own. -->
+    <div id="firmware">
+    <div id="choose">
+      <label id="release-label">Firmware</label>
+      <!-- drawn by the page; the hidden select below holds the choice -->
+      <div class="picker">
+        <button id="release-button" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="release-label release-button"></button>
+        <ul id="release-list" role="listbox" aria-labelledby="release-label" tabindex="-1" hidden></ul>
+      </div>
+      <select id="release" hidden></select>
+      <button id="choose-file">Choose a local file</button>
+      <input id="file" type="file" accept=".img,.fwu,.zip,.xz,.gz,.tgz,.txz,.tar" hidden>
     </div>
-    <ul id="checks" hidden></ul>
-  </section>
-
-  <section class="panel">
-    <div class="panel-head">
-      <h2><span class="n">03</span>Flash</h2>
-    </div>
+    <ul id="checks" class="checks" hidden></ul>
     <div id="unlock-options" hidden>
       <label><input id="unlock-before-flash" type="checkbox"><span id="unlock-label"></span></label>
       <div id="unlock-hint"></div>
     </div>
-    <div class="flash-row">
-      <button id="flash" class="solid" disabled>Flash</button>
-      <button id="cancel" hidden>Cancel</button>
+    <details id="image-details" hidden>
+      <summary>Image details</summary>
+      <div id="profile-hint"></div>
+      <div id="file-info" hidden>
+        <div id="file-name"></div>
+        <div id="file-status" hidden></div>
+        <dl id="file-meta"></dl>
+        <table id="sections" hidden>
+          <thead><tr><th>Section</th><th>Size</th><th>Offset</th><th>Written</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </details>
+    <div id="action">
+      <button id="flash" class="solid big" disabled>Install</button>
       <span id="hint"></span>
+    </div>
     </div>
     <div id="progress" hidden>
       <div class="track"><div id="bar"></div></div>
       <div id="stage-text"></div>
       <ol id="stages">
+        <li id="stage-download" hidden>Download</li>
         <li id="stage-unlock" hidden>Unlock VRX</li>
         <li>Update mode</li>
         <li>Send file</li>
         <li>Write flash</li>
         <li>Restart</li>
       </ol>
+      <p id="keep-plugged">Keep the device plugged in and powered until this finishes.</p>
       <button id="reselect" class="solid" hidden>Select the device again</button>
+      <button id="cancel" hidden>Cancel</button>
     </div>
     <div id="result" hidden></div>
+    <button id="result-log" class="link" hidden>Copy the log for a bug report</button>
+    <details id="unit-more">
+      <summary>Device details</summary>
+      <dl id="unit-info" hidden></dl>
+    </details>
+    <!-- Closed until wanted (open by itself for a unit in bridge mode): fpvOS's
+         device modes, normal, or the unit's AR8030 on USB for another device. -->
+    <details id="advanced" hidden>
+      <summary>Advanced</summary>
+      <div id="device-mode">
+        <span class="label" id="device-mode-label">Device mode</span>
+        <div class="segmented" role="radiogroup" aria-labelledby="device-mode-label">
+          <button id="mode-normal" role="radio">Normal</button>
+          <button id="mode-bridge" role="radio">Bridge</button>
+        </div>
+        <p id="device-mode-note"></p>
+      </div>
+    </details>
   </section>
 
-  <section class="panel">
-    <details>
+  <!-- Everything else, out of the way. -->
+  <section class="panel quiet">
+    <div id="developer" hidden>
+      <h3>Developer</h3>
+      <p class="note">Ask the connected Ascent updater to enable USB network (RNDIS) mode. The standard VRX
+        already exposes networking alongside serial. An air unit leaves serial mode until it reboots.</p>
+      <button id="netmode" disabled>Switch to network mode</button>
+    </div>
+    <details id="log-panel">
       <summary>Log</summary>
       <div class="log-tools">
         <label><input id="verbose" type="checkbox"> Details</label>
@@ -356,37 +456,9 @@
     </details>
   </section>
 
-  <section class="panel note">
-    <details>
-      <summary>How it works</summary>
-      <p>The page talks to the updater that already runs on the device, the same one the vendor's
-        PC tool talks to, and checks the image before anything is sent.</p>
-      <p><b>Ascent Lite/Lite+:</b> the unit reboots into its update system, checks the transfer MD5
-        and image CRC, and updates banked components. Boot and environment can be written in place;
-        this is not a whole-system atomic update.</p>
-      <p><b>Standard Ascent VRX:</b> use external DC power and USB. The page checks the signed
-        OTRA container, SHA-256 and the standard VRX RSA key. The receiver applies its own
-        authentication and hardware checks, then writes both single and paired NAND partitions.
-        Persistent application changes may be replaced. VRX Pro and Avatar images need different profiles.</p>
-      <p><b>BETAFPV P1 Air · Stock / fpvOS:</b> select a full P1 <code>.fwu</code> bundle.
-        The unit enters clean recovery, installs and verifies the image, then reboots.
-        Keep external power connected. For initial installation from stock 1.0.44,
-        use the browser preparation controls in the Device panel first. Stock images and VRX bundles
-        are not supported by this profile.</p>
-      <p>Close the vendor's PC tool and any serial terminal first: only one program can use the port.</p>
-      <p>On Linux your user needs access to <code>/dev/ttyACM*</code> (the <code>dialout</code> group),
-        and ModemManager, if it runs, can grab a new serial port for a few seconds.</p>
-    </details>
-    <details>
-      <summary>Advanced</summary>
-      <p>Ask the connected Ascent updater to enable USB network (RNDIS) mode. The standard VRX
-        already exposes networking alongside serial. An air unit leaves serial mode until it reboots.</p>
-      <button id="netmode" disabled>Switch to network mode</button>
-    </details>
-  </section>
-
   <footer>
-    <a href="https://github.com/gehee/fpvOS">fpvOS</a> · open firmware for FPV VRX and VTX
+    <a href="https://github.com/gehee/fpvOS">fpvOS</a> · open firmware for FPV VRX and VTX ·
+    <a href="https://github.com/gehee/fpvOS_flasher#readme">How the flasher works</a>
   </footer>
 </main>
 

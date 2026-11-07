@@ -1,6 +1,6 @@
 // Pure selection planning plus one sequential, profile-configured stage runner.
 import { PROFILES, getProfile, profileForFileName, profileForImage, profileForDevice } from './devices/index.js';
-import { compareVersions } from './firmware.js';
+import { aswBoard, compareVersions } from './firmware.js';
 import { openFirmware } from './archive.js';
 import { md5hex } from './transports/ascent.js';
 import { formatBytes } from './devices/common.js';
@@ -14,7 +14,7 @@ export async function prepareFirmware(file, { profile = null, onProgress = () =>
   });
   const imageProfile = profileForImage(opened.bytes);
   const parsed = imageProfile ? await imageProfile.meta.image.parse(opened.bytes, opened.name)
-    : { errors: [`No supported hardware profile for this firmware image. Supported targets: ${PROFILES.map((p) => p.meta.name).join(', ')}.`], warnings: [], sections: [] };
+    : { errors: [unsupportedImage(opened.bytes, profile)], warnings: [], sections: [] };
   parsed.profileId = imageProfile?.meta.id ?? null;
   const image = { ...opened, parsed, md5: parsed.errors.length ? null : md5hex(opened.bytes) };
   image.view = {
@@ -28,6 +28,22 @@ export async function prepareFirmware(file, { profile = null, onProgress = () =>
   return image;
 }
 
+// What a file this page cannot flash is, and what the connected unit takes:
+// the vendor's download holds images for every Ascent product side by side.
+const ASW_PRODUCTS = { 1: 'the Ascent L_Gnd ground unit', 3: 'the Ascent air unit', 5: 'the Ascent VRX' };
+function unsupportedImage(bytes, profile) {
+  const board = aswBoard(bytes);
+  const rk = bytes.length >= 4 && String.fromCharCode(...bytes.subarray(0, 4)) === 'RKFW';
+  const what = rk ? 'This is a VRX Pro image: the VRX Pro installs from an SD card, not from this page.'
+    : board != null ? `This is an image for ${ASW_PRODUCTS[board] ?? `Ascent board ${board}`}, which this page does not flash.`
+    : 'This file is not a firmware image this page knows.';
+  const prefix = profile?.meta.image.prefix;
+  const wanted = profile ? (prefix ? ` The connected ${profile.meta.name} takes ${prefix}_<version>.img.`
+    : ` The connected ${profile.meta.name} takes an fpvOS .fwu bundle.`)
+    : ' Connect the device to see which file it takes.';
+  return what + wanted;
+}
+
 export function evaluateSelection({ info = null, profile = null, image = null, selectedProfile = null, unlockOverride = null } = {}) {
   const parsed = image?.parsed;
   const issues = [];
@@ -35,7 +51,7 @@ export function evaluateSelection({ info = null, profile = null, image = null, s
   for (const text of image?.notes ?? []) issues.push({ level: 'info', text });
   for (const text of parsed?.errors ?? []) issues.push({ level: 'error', text });
   for (const text of parsed?.warnings ?? []) issues.push({ level: 'warn', text });
-  if (info && !profile) issues.push({ level: 'error', text: `Unsupported device identity: ${info.name || info.firmware || 'unknown'}. Supported targets: ${PROFILES.map((p) => p.meta.name).join(', ')}. Selecting a profile cannot override device identity.` });
+  if (info && !profile) issues.push({ level: 'error', text: `This page cannot flash this device: it answered as ${info.name || info.firmware || 'an unknown device'}${info.hardware ? ` (${info.hardware})` : ''}.` });
   if (profile && selectedProfile && profile !== selectedProfile) issues.push({ level: 'error', text: `The selected profile (${selectedProfile.meta.name}) does not match the connected ${profile.meta.name}.` });
   const target = selectedProfile ?? profile;
   const bootstrapRequested = profile?.meta.id === 'ascent-vrx' && parsed?.profileId === 'fpvos-ar9311' && parsed.kind === 0;

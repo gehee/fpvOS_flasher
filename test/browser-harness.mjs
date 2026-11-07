@@ -14,13 +14,15 @@ export const PUBLIC_ASSETS = new Set(['index.html', 'app.js', 'flasher.js', 'fir
   'archive.js', 'xz.js', 'checksum.js', 'fonts/ChakraPetch-Medium.ttf', 'fonts/ChakraPetch-SemiBold.ttf']);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function openBrowser({ root, out, permission, headless = true, onProblem = () => {} }) {
+// extra: { 'served/path': 'file on disk' } on top of the public assets (a test catalog;
+// a path ending in / is served as HTML, a directory listing)
+export async function openBrowser({ root, out, permission, headless = true, onProblem = () => {}, extra = {} }) {
   const server = http.createServer((req, res) => {
     const name = new URL(req.url, 'http://localhost').pathname.slice(1) || 'index.html';
-    if (!PUBLIC_ASSETS.has(name)) { res.writeHead(404).end(); return; }
-    res.writeHead(200, { 'content-type': name.endsWith('.js') ? 'text/javascript' : name.endsWith('.html') ? 'text/html'
+    if (!PUBLIC_ASSETS.has(name) && !extra[name]) { res.writeHead(404).end(); return; }
+    res.writeHead(200, { 'content-type': name.endsWith('.js') ? 'text/javascript' : name.endsWith('.html') || name.endsWith('/') ? 'text/html'
       : name.endsWith('.json') ? 'application/json' : name.endsWith('.ttf') ? 'font/ttf' : 'application/octet-stream' });
-    fs.createReadStream(path.join(root, name)).on('error', (e) => res.destroy(e)).pipe(res);
+    fs.createReadStream(extra[name] ?? path.join(root, name)).on('error', (e) => res.destroy(e)).pipe(res);
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   const origin = `http://127.0.0.1:${server.address().port}`;

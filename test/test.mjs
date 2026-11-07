@@ -8,7 +8,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   CMD, FrameParser, encodeFrame, crc32, md5hex,
-  encodeFileStart,
+  encodeFileStart, deviceModeOf, deviceModeRequest, ASCENT_PROTOCOL,
 } from '../transports/ascent.js';
 import { parseAirImage } from '../devices/ascent-air.js';
 import { firmwareVersion } from '../firmware.js';
@@ -165,4 +165,28 @@ test('flash: a lost data ack fails instead of sending the chunk twice', async ()
 
 test('flash: md5 rejected by the unit', async () => {
   await assert.rejects(simFlash({ badMd5: true }), /rejected the file: md5 check fail/);
+});
+
+test('Device modes: read from FIND_DEVICE, switched with the right REBOOT name', async () => {
+  assert.equal(deviceModeOf({ detail: 'normal mode' }), 'normal');
+  assert.equal(deviceModeOf({ detail: 'bridge mode' }), 'bridge');
+  assert.equal(deviceModeOf({ detail: 'clean RAM mode' }), 'update');
+  assert.equal(deviceModeOf({ detail: 'OK' }), null);       // stock updater
+  assert.equal(deviceModeRequest('normal', 'bridge'), 'bridge');
+  assert.equal(deviceModeRequest('bridge', 'normal'), 'normal');
+  assert.equal(deviceModeRequest('update', 'normal'), 'reboot');
+  assert.equal(deviceModeRequest('normal', 'update'), 'clean');
+  assert.equal(deviceModeRequest('bridge', 'update'), 'clean');
+  assert.equal(deviceModeRequest('update', 'bridge'), null);
+  assert.equal(deviceModeRequest('normal', 'normal'), null);
+  assert.equal(deviceModeRequest(null, 'bridge'), null);
+  const sent = [];
+  const reply = new Uint8Array(68);
+  new DataView(reply.buffer).setInt32(0, -1, true);
+  reply.set(new TextEncoder().encode('bridge mode unsupported'), 4);
+  const session = { request: async (cmd, payload, opts) => { sent.push({ cmd, payload, opts }); return { payload: reply }; } };
+  assert.deepEqual(await ASCENT_PROTOCOL.deviceMode(session, 'bridge'), { status: -1, detail: 'bridge mode unsupported' });
+  assert.equal(sent[0].cmd, CMD.REBOOT);
+  assert.equal(new TextDecoder().decode(sent[0].payload).replace(/\0+$/, ''), 'bridge');
+  assert.equal(sent[0].opts.retryMs, 0);
 });

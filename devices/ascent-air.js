@@ -3,7 +3,7 @@
 import { crc32 } from '../checksum.js';
 import { ASCENT_TRANSPORT } from '../transports/ascent.js';
 import { aswBoard } from '../firmware.js';
-import { defineDevice, aswImage, sameFactoryIdentity, formatHex } from './common.js';
+import { defineDevice, aswImage, sameFactoryIdentity, formatHex, stockFirmware } from './common.js';
 import { ASCENT_ENTER_UPDATE, VERIFY_UPDATE_MODE, ASCENT_FLASH_STEPS, ASCENT_POSTFLASH_STEPS } from '../stages/ascent.js';
 
 const BOARD_NAMES = { 1: 'Ascent ground unit (L_Gnd)', 3: 'Ascent air unit (H_Sky)', 5: 'Ascent VRX (G_Gnd)' };
@@ -87,16 +87,40 @@ function airNormalMatches(current, before) {
       && lite.hardware === legacy.hardware.slice(0, -1) + '1');
 }
 // Some air clean updaters replace the model and factory fields with these
-// placeholders. Accept them only after identifying the original air unit.
+// placeholders. Accept them only after identifying the original air unit. The
+// serial number is either cleared or kept (a Lite+ on stock 18.21.10 keeps it).
 const airUpdateMatches = (current, before, phase) => matchesAir(before) && (airNormalMatches(current, before)
   || phase === 'clean' && current.name === 'Ascent' && current.hardware === 'FPV-Edu-Sky-V0.0-0.0'
-    && current.serial === '' && current.firmware === before.firmware && /^Ascent_H_Sky_\d+_\d+_\d+$/.test(current.firmware ?? '')
+    && (current.serial === '' || current.serial === before.serial) && current.firmware === before.firmware && /^Ascent_H_Sky_\d+_\d+_\d+$/.test(current.firmware ?? '')
     && current.status === 0 && (current.detail === 'OK' || current.detail === ''));
+
+// fpvOS's updater says which device mode the unit is in; the stock one says OK.
+// Its firmware field keeps stock's name for the PC tool; its own version is in
+// the SDK field (from fpvOS 3a8bff1's updater on; earlier ones leave it empty).
+const runsFpvos = (info) => /^(normal|bridge|clean RAM) mode$/.test(info.detail ?? '');
+const fpvosVersion = (info) => (info.sdk ? `fpvOS ${info.sdk}` : 'fpvOS');
+// Bridge mode kept across reboots came with fpvOS 2026.10.beta4-45 (537b17a):
+// the device mode switch is offered from there, beta5 and every later release.
+// The version is git describe's: YYYY.MM[.betaN][-K-gHASH][-dirty].
+export function keepsBridgeMode(info) {
+  const m = /^(\d{4})\.(\d{1,2})(?:\.beta(\d+))?(?:-(\d+)-g[0-9a-f]+)?(?:-dirty)?$/.exec(info.sdk ?? '');
+  if (!m) return false;
+  const [year, month, beta, ahead] = [+m[1], +m[2], m[3] == null ? null : +m[3], +(m[4] ?? 0)];
+  if (year * 12 + month !== 2026 * 12 + 10) return year * 12 + month > 2026 * 12 + 10;
+  return beta == null || beta > 4 || beta === 4 && ahead >= 45;
+}
+const airModel = (info) => /-472-/.test(info.hardware ?? '') || /plus|\+/i.test(info.name ?? '')
+  ? 'Caddx Ascent Lite+' : 'Caddx Ascent Lite';
 
 export const ASCENT_AIR = defineDevice({
   meta: {
     id: 'ascent-air', name: 'Ascent Lite / Lite+ air unit', models: ['Ascent Lite air unit', 'Ascent Lite+ air unit'],
-    usb: [{ usbVendorId: 0x1d76, usbProductId: 0x0101 }],
+    // Stock's serial port, and fpvOS's bridge mode: the AR8030's boot ROM, then
+    // the running chip (the serial port stays, with the updater on it).
+    usb: [{ usbVendorId: 0x1d76, usbProductId: 0x0101 }, { usbVendorId: 0x4152, usbProductId: 0x8030 },
+      { usbVendorId: 0x1d6b, usbProductId: 0x8030 }],
+    deviceModes: keepsBridgeMode,
+    describe: (info) => ({ model: airModel(info), fpvos: runsFpvos(info), firmware: runsFpvos(info) ? fpvosVersion(info) : stockFirmware(info) }),
     identity: { matches: matchesAir, normalMatches: airNormalMatches, updateMatches: airUpdateMatches },
     image: aswImage({ prefix: 'Ascent_H_Sky', board: 3, parse: parseAirImage,
       checks: (p) => [['CRC-32', p.crcStored == null ? '' : p.crcStored === p.crcCalc

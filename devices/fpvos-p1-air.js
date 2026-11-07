@@ -20,6 +20,7 @@ export const FPVOS_P1_AIR = defineDevice({
     models: ['BETAFPV P1 Air · Stock', 'BETAFPV P1 Air · fpvOS'],
     usb: [{ usbVendorId: 0x1d6b, usbProductId: 0x0104 }],
     deviceVersion: () => null,
+    describe: () => ({ model: 'BETAFPV P1 Air', fpvos: true, firmware: 'fpvOS' }),
     preparation: Object.freeze({ enterBootloader: enterP1Bootloader, loadRecovery: prepareP1Recovery,
       serialFilter: P1_STOCK_USB, hidFilter: P1_HID_FILTER }),
     identity: { matches: matchesFpvosP1Air, normalMatches: (a, b) => matchesFpvosP1Air(a) && matchesFpvosP1Air(b) },

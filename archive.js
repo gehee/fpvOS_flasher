@@ -83,7 +83,7 @@ export async function openFirmware(file, { wanted = () => false, family = () => 
       }
       const families = new Set(hits.map((e) => family(stripCompression(baseName(e.name)))).filter(Boolean));
       if (families.size > 1) {
-        throw new ArchiveError(`${archive} contains images for different hardware. Connect a device or select a hardware profile first.`);
+        throw new ArchiveError(`${archive} contains images for different hardware. Connect the device first.`);
       }
       // the newest by the version in the name
       const ver = (e) => (/(\d+)_(\d+)_(\d+)\.img/i.exec(e.name) ?? [0, 0, 0, 0]).slice(1).map(Number);

@@ -29,6 +29,7 @@ const fake = fs.readFileSync(path.join(root, 'test/fake-serial.js'), 'utf8');
 async function connectedPage(query = '') {
   await cdp('Page.navigate', { url: `${base}${query}` });
   await until("document.readyState === 'complete' && document.querySelector('#unit-info') && !document.querySelector('#unit-info').hidden", 10000, 'auto-connect');
+  await js("document.querySelector('#image-details').open = true");   // a chosen file's details
 }
 
 async function p1PreparationControls() {
@@ -51,7 +52,7 @@ async function p1PreparationControls() {
   // step 2 chooser locks competing actions; cancelling leaves a retryable status
   await js(`navigator.hid.requestDevice = () => new Promise(resolve => { window.resolveP1Chooser = resolve; });
     document.querySelector('#p1-load-recovery').click();`);
-  if (!await js("document.querySelector('#connect').disabled && document.querySelector('#p1-enter-bootloader').disabled && !document.querySelector('#p1-preparation-cancel').hidden && document.querySelector('#flash').textContent === 'Flash'")) throw new Error('Preparation must lock competing actions without claiming a firmware flash.');
+  if (!await js("document.querySelector('#connect').disabled && document.querySelector('#p1-enter-bootloader').disabled && !document.querySelector('#p1-preparation-cancel').hidden && !/…$/.test(document.querySelector('#flash').textContent)")) throw new Error('Preparation must lock competing actions without claiming a firmware flash.');
   await js("document.querySelector('#p1-preparation-cancel').click(); window.resolveP1Chooser([])");
   await until("!document.querySelector('#p1-load-recovery').disabled && document.querySelector('#p1-preparation-cancel').hidden", 3000);
   if (!await js("document.querySelector('#p1-preparation-status').textContent.includes('No bootloader selected')")) throw new Error('Empty chooser must leave a retryable status.');
@@ -64,6 +65,7 @@ async function p1StockDetection() {
   const fail = [];
   // a stock P1 is offered by Connect but must not auto-connect as a device
   if (!await js("document.querySelector('#unit-info').hidden")) fail.push('stock P1 auto-connected as a device');
+  if (!await js("document.querySelector('#p1-preparation').hidden")) fail.push('P1 preparation shown before a stock P1 was found');
   await js("document.querySelector('#connect').click()");
   await until("document.querySelector('#ask').open", 3000, 'stock P1 prepare confirm');
   if (!await js("/stock firmware 1\\.0\\.44/.test(document.querySelector('#ask-text').textContent)")) fail.push('stock P1 confirm lacks the supported-version scope');
@@ -73,7 +75,7 @@ async function p1StockDetection() {
   const raw = String(await js("window.__fake.p1RebootRaw"));
   if (raw !== String([0xaa, 5, 0, 0x1d, 0, 0, 0xcc, 0xeb, 0xaa])) fail.push(`wrong P1 restart bytes: ${raw}`);
   await until("document.querySelector('#p1-preparation-cancel').hidden", 5000, 'restart finished');
-  if (!await js("document.querySelector('#p1-preparation').open")) fail.push('preparation panel did not open');
+  if (!await js("document.querySelector('#p1-preparation').open && !document.querySelector('#p1-preparation').hidden")) fail.push('preparation panel did not open');
   if (!await js("document.querySelector('#p1-stock-confirm').checked")) fail.push('stock confirm not set from Connect');
   if (!await js("/Load P1 recovery|download gadget/.test(document.querySelector('#p1-preparation-status').textContent)")) fail.push('did not guide to the recovery step');
   if (await js("document.querySelector('#p1-load-recovery').disabled")) fail.push('Load P1 recovery not enabled after restart');
@@ -123,7 +125,7 @@ async function scenario(name, query, { reselect, file = img, source = img, profi
     }
     await sleep(200);
   }
-  await js("document.querySelector('details').open = true");
+  await js("document.querySelector('#log-panel').open = true");
   await shot(`${name}-done`);
   const r = await js(`({
     result: document.querySelector('#result').textContent,
@@ -150,6 +152,148 @@ async function scenario(name, query, { reselect, file = img, source = img, profi
   return fail;
 }
 
+// The firmware choice: published releases newest first, an older one installed
+// from the list (downloaded, checked against its MD5, one confirmation), then a
+// local file joins the list.
+async function catalogInstall() {
+  console.log('--- firmware choice: an older release, then a local file');
+  const fail = [];
+  await connectedPage();
+  await until("document.querySelector('#flash').textContent === 'Install fpvOS test-new'", 5000, 'latest release selected');
+  const options = await js("[...document.querySelectorAll('#release option')].map(o => o.textContent).join('|')");
+  if (options !== `fpvOS test-new · latest|fpvOS test-old|fpvOS-old-Ascent_H_Sky.img · test|${buildImg} · test`) fail.push(`release list: ${options}`);
+  if (!await js("document.querySelector('#device-name').textContent === 'Caddx Ascent Lite'")) fail.push('device name');
+  if (!await js("document.querySelector('#start').hidden && document.querySelector('#developer').hidden && document.querySelector('#image-details').hidden")) fail.push('connect panel, developer section or image details shown');
+  await shot('install-ready');
+  await js("document.querySelector('#release-button').click()");
+  if (await js("document.querySelector('#release-list').hidden")) fail.push('firmware list did not open');
+  await shot('install-list-open');
+  await js("document.querySelector('#release-list li[data-value=\"test-old\"]').click()");
+  if (!await js("document.querySelector('#release-list').hidden && document.querySelector('#release').value === 'test-old'")) fail.push('firmware list did not pick and close');
+  if (!await js("document.querySelector('#flash').textContent === 'Install fpvOS test-old'")) fail.push('older release not selected');
+  await js("document.querySelector('#flash').click()");
+  await until("document.querySelector('#ask').open", 10000, 'install confirm');
+  if (!await js("document.querySelector('#ask-title').textContent === 'Install fpvOS test-old on your Caddx Ascent Lite?'")) fail.push('install confirm title');
+  await shot('install-confirm');
+  await js("document.querySelector('#ask-ok').click()");
+  await until("!document.querySelector('#result').hidden", 120000, 'install finished');
+  const r = await js(`({ ok: document.querySelector('#result').dataset.ok, text: document.querySelector('#result').textContent,
+    md5ok: window.__fake.md5ok, remotePath: window.__fake.remotePath, mode: window.__fake.mode,
+    hidden: document.querySelector('#flash').hidden, hint: document.querySelector('#hint').textContent })`);
+  await shot('install-done');
+  console.log(r.text);
+  if (r.ok !== 'true' || !/runs fpvOS test-old/.test(r.text)) fail.push(`install result: ${r.text}`);
+  if (!r.md5ok) fail.push('unit md5 check failed');
+  if (r.mode !== 'normal') fail.push(`unit ends in ${r.mode} mode`);
+  if (r.remotePath !== '/tmp/pc/Ascent_H_Sky_18_21_10.img') fail.push(`wrong remote filename: ${r.remotePath}`);
+  if (!r.hidden || !/unplug/.test(r.hint)) fail.push('install offered again after success');
+  // a local file joins the list and becomes the selection
+  await chooseFile(img);
+  await until("document.querySelector('#release').value === 'file' && document.querySelector('#flash').textContent === 'Flash this file' && !document.querySelector('#flash').disabled", 10000, 'local file selected');
+  if (!await js(`[...document.querySelectorAll('#release option')].pop().textContent === ${JSON.stringify(`Local file: ${path.basename(img)}`)}`)) fail.push('local file not in the list');
+  if (await js("document.querySelector('#image-details').hidden")) fail.push('local file details hidden');
+  await shot('install-local-file');
+  // a VRX has no published image here: nothing to install until a file is chosen
+  await connectedPage('?device=vrx');
+  await until("/no fpvOS release/i.test(document.querySelector('#hint').textContent)", 5000, 'no-release hint');
+  if (!await js("/test-firmware/.test(document.querySelector('#hint').textContent)")) fail.push('no-release hint does not mention test-firmware/');
+  if (!await js("document.querySelector('#flash').disabled && document.querySelector('#release').disabled")) fail.push('install offered without an image');
+  // a unit on fpvOS shows fpvOS's version, not the stock name it reports for the PC tool
+  await connectedPage('?airFpvos=2026.10.beta4-42-g3a8bff1');
+  if (!await js("document.querySelector('#device-firmware').textContent === 'Runs fpvOS 2026.10.beta4-42-g3a8bff1'")) fail.push(`fpvOS version: ${await js("document.querySelector('#device-firmware').textContent")}`);
+  if (!await js("/Reported as/.test(document.querySelector('#unit-info').textContent) && /already runs fpvOS/.test(document.querySelector('#hint').textContent)")) fail.push('fpvOS unit details or hint');
+  await shot('fpvos-unit');
+  // ?dev shows the developer section
+  await connectedPage('?dev');
+  if (await js("document.querySelector('#developer').hidden")) fail.push('developer section hidden with ?dev');
+  return fail;
+}
+
+// Test builds from test-firmware/: fetched when chosen, shown with every check of
+// a local file (an unversioned name warns), and flashed as one.
+async function testBuilds() {
+  console.log('--- test builds from test-firmware/');
+  const fail = [];
+  await connectedPage();
+  await until("document.querySelector('#release-list li[data-value^=\"test:\"]')", 5000, 'test builds listed');
+  await js(`document.querySelector('#release-button').click(); document.querySelector('#release-list li[data-value="test:fpvOS-old-Ascent_H_Sky.img"]').click()`);
+  await until("document.querySelector('#flash').textContent === 'Flash this file' && !document.querySelector('#flash').disabled", 10000, 'unversioned test build loaded');
+  if (!await js("/file name has no version/.test(document.querySelector('#checks').textContent)")) fail.push('no version warning for an unversioned test build');
+  if (await js("document.querySelector('#image-details').hidden")) fail.push('test build details hidden');
+  await js(`document.querySelector('#release-button').click(); document.querySelector('#release-list li[data-value="test:${build}/${buildImg}"]').click()`);
+  await until(`document.querySelector('#file-name').textContent === ${JSON.stringify(buildImg)} && !document.querySelector('#flash').disabled`, 10000, 'test build loaded');
+  if (await js("/file name has no version/.test(document.querySelector('#checks').textContent)")) fail.push('version warning for a versioned test build');
+  if (!await js(`document.querySelector('#release-list li[data-value="test:${build}/${buildImg}"] small')?.textContent === ${JSON.stringify(build)}`)) fail.push('build folder not under the test build name');
+  // a long name is cut short in the button, its tag and the arrow stay whole
+  if (!await js("(() => { const b = document.querySelector('#release-button'), t = b.querySelector('.tag'); return b.scrollWidth <= b.clientWidth && t && t.getBoundingClientRect().right <= b.getBoundingClientRect().right - 40; })()")) fail.push('test build name overflows the firmware button');
+  await shot('test-build');
+  await js("document.querySelector('#flash').click()");
+  await until("document.querySelector('#ask').open", 10000, 'test build confirm');
+  await js("document.querySelector('#ask-ok').click()");
+  await until("!document.querySelector('#result').hidden", 120000, 'test build flashed');
+  const r = await js("({ ok: document.querySelector('#result').dataset.ok, text: document.querySelector('#result').textContent, remotePath: window.__fake.remotePath })");
+  if (r.ok !== 'true') fail.push(`test build flash: ${r.text}`);
+  if (r.remotePath !== '/tmp/pc/Ascent_H_Sky_18_21_10.img') fail.push(`wrong remote filename: ${r.remotePath}`);
+  // an air image is no test build for a VRX
+  await connectedPage('?device=vrx');
+  if (await js("[...document.querySelectorAll('#release option')].some(o => o.value.startsWith('test:'))")) fail.push('air test build offered to a VRX');
+  return fail;
+}
+
+// fpvOS's device modes on an air unit: normal -> bridge -> normal through the
+// switch (the unit re-enumerates each time), a unit found in update mode, a
+// refused switch, and none of it on stock's updater.
+async function deviceModes() {
+  console.log('--- Device modes: bridge and back, update mode, refusal, stock');
+  const fail = [];
+  const q = '?airFpvos=2026.10.beta5&modeLag=3';
+  // firmware before persistent bridge mode: no switch
+  await connectedPage('?airFpvos=2026.10.beta4-44-g4372d89-dirty');
+  if (!await js("document.querySelector('#advanced').hidden")) fail.push('device mode switch shown on beta4-44');
+  const flip = async (to, text) => {
+    await js(`document.querySelector('#mode-${to}').click()`);
+    await until("document.querySelector('#ask').open", 3000, `${to} confirm`);
+    if (!await js(`document.querySelector('#ask-title').textContent === 'Switch to ${to} mode?'`)) fail.push(`${to} confirm title`);
+    await js("document.querySelector('#ask-ok').click()");
+    await until(text ? `!document.querySelector('#start').hidden && document.querySelector('#start-note').textContent.includes(${JSON.stringify(text)})`
+      : `window.__fake.rebootPayloads.includes('${to}')`, 5000, `${to} done`);
+  };
+  await connectedPage(q);
+  // under Advanced, closed until opened
+  if (!await js("!document.querySelector('#advanced').hidden && !document.querySelector('#advanced').open")) fail.push('Advanced not shown closed');
+  await js("document.querySelector('#advanced').open = true");
+  if (!await js("document.querySelector('#mode-normal').getAttribute('aria-checked') === 'true' && /^Normal:/.test(document.querySelector('#device-mode-note').textContent)")) fail.push('normal mode not shown');
+  await shot('device-mode-normal');
+  await flip('bridge', 'is in bridge mode');
+  await shot('device-mode-switched');
+  // the unit comes back (in bridge mode) and the page connects to it again
+  await until("!document.querySelector('#device').hidden && document.querySelector('#mode-bridge').getAttribute('aria-checked') === 'true'", 10000, 'bridge unit');
+  if (!await js("document.querySelector('#advanced').open && document.querySelector('#firmware').hidden && /stays in bridge mode/.test(document.querySelector('#device-mode-note').textContent)")) fail.push('bridge mode card');
+  await shot('device-mode-bridge');
+  await flip('normal', '');
+  await until("!document.querySelector('#device').hidden && document.querySelector('#mode-normal').getAttribute('aria-checked') === 'true'", 10000, 'normal unit');
+  if (!await js("document.querySelector('#start-note').hidden")) fail.push('a note after switching back to normal');
+  if (String(await js('window.__fake.rebootPayloads')) !== 'bridge,normal') fail.push(`mode requests: ${await js('window.__fake.rebootPayloads')}`);
+  // found in update mode: one button out, no confirmation
+  await connectedPage(`${q}&airMode=clean`);
+  if (!await js("!document.querySelector('#update-mode').hidden && document.querySelector('#advanced').hidden")) fail.push('update mode notice');
+  await shot('device-mode-update');
+  await js("document.querySelector('#mode-restart').click()");
+  await until("document.querySelector('#start-note').textContent.includes('restarting normally')", 5000, 'restart');
+  if (String(await js('window.__fake.rebootPayloads')) !== 'reboot') fail.push('restart request');
+  // a refused switch keeps the unit and says why
+  await connectedPage(`${q}&refuseMode=1`);
+  await js("document.querySelector('#mode-bridge').click()");
+  await until("document.querySelector('#ask').open", 3000, 'refused confirm');
+  await js("document.querySelector('#ask-ok').click()");
+  await until("!document.querySelector('#result').hidden", 5000, 'refusal shown');
+  if (!await js("document.querySelector('#result').dataset.ok === 'false' && /refused bridge mode/.test(document.querySelector('#result').textContent) && !document.querySelector('#device').hidden")) fail.push('refusal');
+  // stock's updater has no modes
+  await connectedPage();
+  if (!await js("document.querySelector('#advanced').hidden && document.querySelector('#update-mode').hidden")) fail.push('device modes shown for stock');
+  return fail;
+}
+
 async function looks() {
   console.log('--- looks: dark, phone width, an unsupported L_Gnd image');
   await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
@@ -168,10 +312,9 @@ async function looks() {
   return fail;
 }
 
-async function rejectedProfile(name, query, file, selected = '') {
+async function rejectedProfile(name, query, file) {
   console.log(`--- ${name}`);
   await connectedPage(query);
-  if (selected) await js(`document.querySelector('#profile').value = ${JSON.stringify(selected)}; document.querySelector('#profile').dispatchEvent(new Event('change'))`);
   await chooseFile(file);
   await until("document.querySelectorAll('#checks li[data-level=error]').length > 0", 10000, 'profile mismatch');
   await shot(name);
@@ -180,17 +323,15 @@ async function rejectedProfile(name, query, file, selected = '') {
   return disabled && commands.every((c) => /FIND_DEVICE/.test(c)) ? [] : [`${name}: mismatch allowed a flash`];
 }
 
-async function offlineProfiles(bundle) {
-  console.log('--- offline archive profile selection');
+async function offlineArchive(bundle) {
+  console.log('--- mixed archive with no device connected');
   await connectedPage();
   await js("document.querySelector('#disconnect').click()");
   await until("document.querySelector('#unit-status').dataset.kind === 'idle'", 5000);
   await chooseFile(bundle);
   await until("document.querySelector('#checks').textContent.includes('different hardware')", 10000, 'ambiguous bundle rejected');
-  await js("document.querySelector('#profile').value = 'ascent-air'; document.querySelector('#profile').dispatchEvent(new Event('change'))");
-  await until("document.querySelector('#file-name').textContent.startsWith('Ascent_H_Sky') && /MD5/.test(document.querySelector('#file-meta').textContent)", 10000, 'offline air selection');
   if (!await js("document.querySelector('#flash').disabled")) return ['flash enabled while disconnected'];
-  await shot('offline-profile');
+  await shot('offline-archive');
   return [];
 }
 
@@ -295,7 +436,23 @@ p1Header.writeUInt32LE(1345409867, 12);
 p1Header.fill(0, 508); p1Header.writeUInt32LE(crc32(p1Header), 508);
 fs.writeFileSync(p1Fwu, Buffer.concat([p1Header, ...fwuParts]));
 
-const harness = await openBrowser({ root, out });
+// two published releases for the firmware choice: the synthetic air image
+const catalog = path.join(out, 'catalog.json');
+const published = (release) => ({ release, images: [{ devices: ['ascent-air'], file: `${release}/air.img`,
+  name: 'Ascent_H_Sky_18_21_10.img', size: fs.statSync(img).size, md5: createHash('md5').update(fs.readFileSync(img)).digest('hex') }] });
+fs.writeFileSync(catalog, JSON.stringify({ releases: [published('test-new'), published('test-old')] }));
+// test builds in test-firmware/, as python3 -m http.server lists them: a build
+// folder with an air image and a note, a goggle image and an unversioned air image
+const listing = (name, links) => {
+  fs.writeFileSync(path.join(out, name), `<html><body><ul>${links.map((l) => `<li><a href="${l}">${l}</a></li>`).join('')}</ul></body></html>`);
+  return path.join(out, name);
+};
+const build = '2026-11-06-fpvOS-abc1234', buildImg = 'fpvOS-abc1234-Ascent_H_Sky_18_21_10.img';
+const harness = await openBrowser({ root, out, extra: { 'firmware/catalog.json': catalog,
+  'firmware/test-new/air.img': img, 'firmware/test-old/air.img': img,
+  'test-firmware/': listing('test-root.html', [`${build}/`, 'fpvOS-vrxpro-abc1234.img.xz', 'fpvOS-old-Ascent_H_Sky.img', '?C=N;O=D']),
+  [`test-firmware/${build}/`]: listing('test-build.html', [buildImg, 'notes.txt', '../']),
+  [`test-firmware/${build}/${buildImg}`]: img, 'test-firmware/fpvOS-old-Ascent_H_Sky.img': img } });
 const { cdp, evaluate: js, until, screenshot: shot, chooseFile, problems } = harness;
 const base = `${harness.origin}/`;
 let failures = [];
@@ -326,9 +483,9 @@ try {
   failures.push(...await rejectedProfile('p1-rejects-vrx', '?device=p1', fwu));
   failures.push(...await rejectedProfile('fpvos-vrx-rejects-p1', '?device=fpvos', p1Fwu));
   failures.push(...await rejectedProfile('vrx-rejects-air', '?device=vrx', img));
-  failures.push(...await rejectedProfile('pro-cannot-be-forced', '?device=pro', img, 'ascent-vrx'));
+  failures.push(...await rejectedProfile('pro-rejects-air', '?device=pro', img));
   failures.push(...await rejectedProfile('vrx-rejects-untrusted-signature', '?device=vrx', syntheticVrx));
-  failures.push(...await offlineProfiles(syntheticBundle));
+  failures.push(...await offlineArchive(syntheticBundle));
   failures.push(...await failedTransfer());
   failures.push(...await failedTransfer(true));
   if (process.env.VRX_IMG) {
@@ -341,8 +498,10 @@ try {
     failures.push(...await scenario('vrx-unlock-downgrade', '?device=vrx&fw=18_21_10&enforceRollback=1', { reselect: false, file: vrx, source: vrx, profile: 'ascent-vrx', unlock: true }));
     failures.push(...await failedUnlock(vrx));
     failures.push(...await rejectedProfile('air-rejects-vrx', '', vrx));
-    failures.push(...await rejectedProfile('vrx-rejects-selected-air-profile', '?device=vrx', vrx, 'ascent-air'));
   }
+  failures.push(...await catalogInstall());
+  failures.push(...await testBuilds());
+  failures.push(...await deviceModes());
   failures.push(...await looks());
 } catch (e) {
   failures.push(e.message);

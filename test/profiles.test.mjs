@@ -37,6 +37,8 @@ test('air clean identity is accepted only after a matching normal-mode connectio
   assert.equal(air.meta.identity.normalMatches(airCleanInfo, before), false);
   assert.equal(air.meta.identity.updateMatches(airCleanInfo, before, 'clean'), true);
   assert.equal(air.meta.identity.updateMatches({ ...airCleanInfo, detail: '' }, before, 'clean'), true);
+  // a Lite+ on stock 18.21.10 keeps its serial number in the clean system
+  assert.equal(air.meta.identity.updateMatches({ ...airCleanInfo, serial: before.serial }, before, 'clean'), true);
   for (const phase of ['normal', 'unlock']) assert.equal(air.meta.identity.updateMatches(airCleanInfo, before, phase), false);
   for (const change of [{ name: 'Ascent_VRX' }, { serial: 'OTHER' }, { hardware: 'FPV-Ascent-Gnd-485-V0.0-0.0' },
     { firmware: 'Ascent_H_Sky_17_5_8' }, { firmware: 'Ascent_G_Gnd_17_5_3' }, { status: -1 }, { detail: 'error' }]) {
@@ -172,7 +174,7 @@ test('shared compatibility checks block cross-profile images and unrecognized de
   const image = { parsed: { profileId: vrx.meta.id, version: [17, 5, 8], versionText: '17.5.8', errors: [] } };
   assert.deepEqual(evaluateSelection({ info: vrxInfo, profile: vrx, image }).issues, []);
   assert.match(evaluateSelection({ info: airInfo, profile: air, image }).issues[0].text, /not Ascent Lite/);
-  assert.match(evaluateSelection({ info: vrxInfo, profile: null, image, selectedProfile: vrx }).issues[0].text, /Unsupported device/);
+  assert.match(evaluateSelection({ info: vrxInfo, profile: null, image, selectedProfile: vrx }).issues[0].text, /cannot flash this device: it answered as Ascent_VRX/);
   assert.match(evaluateSelection({ info: vrxInfo, profile: vrx, image, selectedProfile: air }).issues[0].text, /selected profile/);
   assert.equal(evaluateSelection({ info: { ...vrxInfo, firmware: 'Ascent_G_Gnd_18_21_10' }, profile: vrx, image }).issues[0].level, 'warn');
 });
@@ -319,4 +321,12 @@ test('standard VRX stock reference passes production profile and trust key', { s
   assert.equal(r.md5, '4996760841a1bcd0332dea3b7e157542');
   assert.equal(r.parsed.sections.length, 14);
   assert.equal(r.parsed.segments.length, 20);
+});
+
+test('the device mode switch is offered from fpvOS 2026.10.beta4-45 on', async () => {
+  const { keepsBridgeMode } = await import('../devices/ascent-air.js');
+  for (const sdk of ['2026.10.beta4-45-g537b17a', '2026.10.beta4-45-g537b17a-dirty', '2026.10.beta4-120-gabcdef0', '2026.10.beta5',
+    '2026.10.beta5-3-g1234567', '2026.10', '2026.11.beta1', '2027.01']) assert.equal(keepsBridgeMode({ sdk }), true, sdk);
+  for (const sdk of ['', '2026.10.beta4', '2026.10.beta4-44-g4372d89-dirty', '2026.10.beta3-29-g897a489', '2026.09',
+    'development', '2026.10.beta4-45-gZZZ', '18.21.10']) assert.equal(keepsBridgeMode({ sdk }), false, sdk);
 });

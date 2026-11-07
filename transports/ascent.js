@@ -371,9 +371,34 @@ export class Session {
   }
 }
 
+// fpvOS updaters name their device mode in FIND_DEVICE's detail (stock says "OK"):
+// normal, bridge (fpvOS_usb: the unit's AR8030 on USB, the serial port kept) or
+// update (the updater's RAM system). null for a unit without the modes.
+const DEVICE_MODES = Object.freeze({ 'normal mode': 'normal', 'bridge mode': 'bridge', 'clean RAM mode': 'update' });
+export const deviceModeOf = (info) => DEVICE_MODES[info?.detail] ?? null;
+
+// The REBOOT name that leaves mode `from` for mode `to`: "normal" and "bridge"
+// switch live, "clean" reboots into update mode, and update mode goes back
+// with a plain reboot. null when there is no such switch.
+export function deviceModeRequest(from, to) {
+  if (!from || from === to) return null;
+  if (to === 'update') return 'clean';
+  if (to === 'normal') return from === 'update' ? 'reboot' : 'normal';
+  if (to === 'bridge') return from === 'normal' ? 'bridge' : null;
+  return null;
+}
+
 export const ASCENT_PROTOCOL = Object.freeze({
   createSession: (link, log, settings) => new Session(link, log, settings),
   networkMode: (session) => session.request(CMD.NETWORK_MODE, EMPTY, { timeoutMs: 3000, retryMs: 0 }),
+  // One REBOOT, never resent: a second "clean" or "bridge" is a second switch.
+  // The reply is the updater's status and message (68 bytes).
+  deviceMode: async (session, name) => {
+    const f = await session.request(CMD.REBOOT, rebootPayload(name), { timeoutMs: 8000, retryMs: 0 });
+    const p = f.payload;
+    return { status: p.length >= 4 ? new DataView(p.buffer, p.byteOffset, p.length).getInt32(0, true) : -1,
+      detail: cstr(p, 4, 64) };
+  },
 });
 export const ASCENT_TRANSPORT = Object.freeze({
   protocol: ASCENT_PROTOCOL,

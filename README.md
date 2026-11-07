@@ -32,7 +32,6 @@ The Pro's Rockchip container is different, even though its PC upload protocol
 is shared. Modified standard VRX images require a signature accepted by its
 stock updater; the page rejects images that do not verify with the pinned key.
 
-Selecting a hardware profile does not override the connected device's identity.
 See [Architecture](docs/architecture.md) for the device-module contract.
 
 ### AR9311 custom firmware (in development)
@@ -84,8 +83,7 @@ waits for device-side installation and readback, then reboots and checks the
 running package SHA-256. Keep external power connected throughout.
 
 P1 and fpvOS VRX use the same USB IDs. The page identifies the board from the
-updater response and bundle header; selecting a profile or renaming a file
-cannot permit cross-flashing. Reconnection checks the updater identity before
+updater response and bundle header; renaming a file cannot permit cross-flashing. Reconnection checks the updater identity before
 continuing. If several matching ports are available, select the same physical
 unit when prompted.
 
@@ -111,14 +109,24 @@ Then open <http://localhost:8000>:
 1. Plug in the device and click **Connect**, then pick its port in the
    browser's list. A device the page was allowed before connects as soon as it
    is plugged in. **Standard VRX needs external DC power as well as USB.**
-2. Drop a firmware image on the page, and read the checks it shows. An archive
-   holding one works too, so the vendor's `.zip` download can be dropped as it
-   is. **Auto · connected device** selects the matching hardware's image. For
-   offline checks, choose a **Hardware profile** first when an archive contains
-   both air and VRX images. See [Archives](#archives) for the formats.
-3. Click **Flash**.
+2. The page shows the device and what it runs. Click **Install fpvOS
+   <release>**: the page downloads the image published for that device, checks
+   it, and asks once before flashing.
 
-For a standard VRX downgrade, **Unlock before flashing (allow older firmware)**
+The images come from the newest [fpvOS release](https://github.com/gehee/fpvOS/releases):
+the Pages deploy downloads them and publishes them in `firmware/` with
+`firmware/catalog.json` (`tools/make-catalog.mjs`), because a browser cannot
+download release files from GitHub's asset host. A device with no image there
+shows no Install button.
+
+To flash a file of your own, open **More options** and drop a firmware image,
+read the checks it shows, and click **Flash this file**. An archive holding one
+works too, so the vendor's `.zip` download can be dropped as it is. The page
+selects the connected hardware's image. See [Archives](#archives) for the
+formats. `?dev` on the page's address adds the developer options (USB network
+mode).
+
+For a standard VRX downgrade from a file, **Unlock before flashing (allow older firmware)**
 is selected automatically when the validated image version is below the
 version reported on connection. Equal/newer images leave it off. You can
 override the checkbox for the current selection, then click **Unlock and flash**.
@@ -129,6 +137,30 @@ RAM; firmware bytes and signature checks stay unchanged. See
 To use the page from another computer on the LAN, either open it through an
 ssh tunnel to `localhost`, or enable "Insecure origins treated as secure" for
 its address in `chrome://flags`.
+
+### Test builds
+
+Served from the computer that builds fpvOS, the page also offers the images in
+`test-firmware/` next to `index.html`: its files and those of the folders in
+it, listed through the server's directory listing, show up in the firmware
+list as **test build** (only those the connected unit can take: its own
+`.img`, `.fwu` bundles, archives; VRX Pro images are left out). Picking one
+fetches it and shows every check of a local file, then **Flash this file**.
+`test-firmware` is ignored by git, so the published site never has one.
+
+```bash
+mkdir -p test-firmware   # or a link to the build output
+tools/fetch-releases.sh  # the published releases too, in firmware/ as on Pages
+python3 -m http.server 8000 --bind 127.0.0.1
+```
+
+From another computer, open it through an ssh tunnel, so the page is on
+`http://localhost` (Web Serial needs that or https), then open
+<http://localhost:8000>:
+
+```bash
+ssh -N -L 8000:localhost:8000 user@build-host
+```
 
 Close the vendor's PC tool and any serial terminal first, because only one
 program can open the port. On Linux, your user needs access to
@@ -145,11 +177,11 @@ The page takes an image as is, or an archive holding one:
 - Any nesting of these, for example an `.img.xz` inside a zip.
 
 From a zip, only the chosen entry is read, so a 400 MB download costs the size
-of one image. The page selects by the connected or selected hardware profile:
+of one image. The page selects by the connected hardware:
 `Ascent_H_Sky_<version>.img` for Lite/Lite+, `Ascent_G_Gnd_<version>.img` for
 standard VRX. If there are several matching versions, it takes the newest and
-says so. A mixed-hardware archive without a target asks for a profile instead
-of guessing. If there are no images, it lists what the archive holds.
+says so. A mixed-hardware archive with no device connected asks you to connect
+one instead of guessing. If there are no images, it lists what the archive holds.
 
 zip and gzip use the browser's decompressor. `xz.js` handles LZMA2 and its
 CRC-32, CRC-64 or SHA-256 check. Archive integrity checks are verified.

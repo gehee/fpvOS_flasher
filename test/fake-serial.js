@@ -69,6 +69,7 @@
   class FakeUnit {
     constructor(mode) {
       this.mode = mode;
+      this.answers = 0;
       this.custom = custom;
       this.stockP1 = stockP1;
       this.present = true;
@@ -110,16 +111,30 @@
           str(168, type === 'p1' ? 'fpvos-p1-air' : 'fpvos-ar9311'); str(200, type === 'p1' ? 'P1_SKY' : 'Gnd485'); str(236, this.mode === 'clean' ? 'clean RAM mode' : 'normal mode');
         }));
         const current = this.mode === 'unlocked' && !params.has('unlockFails') ? 'Ascent_G_Gnd_0_0_0' : firmware;
-        const airClean = type === 'air' && this.mode === 'clean';
+        // ?airFpvos=VERSION: an air unit on fpvOS's updater (its version in the
+        // SDK field), which keeps the unit's identity in update mode too
+        const airFpvos = type === 'air' && params.get('airFpvos');
+        const airClean = type === 'air' && this.mode === 'clean' && !airFpvos;
         return this.send(f, this.struct(300, (i32, str) => {
-          i32(0, 1 << 20); str(4, airClean ? '' : current.split('_').slice(-3).join('.')); str(36, airClean ? 'Ascent' : factory.name); i32(100, airClean ? 0 : 51);
+          i32(0, 1 << 20); str(4, airFpvos || (airClean ? '' : current.split('_').slice(-3).join('.'))); str(36, airClean ? 'Ascent' : factory.name); i32(100, airClean ? 0 : 51);
           str(104, current); str(168, airClean || type === 'vrx' && this.mode !== 'normal' ? '' : factory.serial);
           str(200, airClean ? 'FPV-Edu-Sky-V0.0-0.0' : type === 'vrx' && this.mode !== 'normal' ? 'FPV-Ascent-Gnd-485-V0.0-0.0' : factory.hardware);
-          str(236, 'OK');
+          if (this.mode === 'unbridging' && ++this.answers > Number(params.get('modeLag'))) this.mode = 'normal';
+          str(236, airFpvos ? ({ clean: 'clean RAM mode', bridge: 'bridge mode', unbridging: 'bridge mode' }[this.mode] ?? 'normal mode') : 'OK');
         }));
       }
       if (f.cmd === C.REBOOT) {
         const request = new TextDecoder().decode(f.payload).replace(/\0.*$/s, '');
+        // fpvOS's updater on an air unit: its device modes (fpvOS_usb), each a new
+        // USB device; ?refuseMode=1 refuses them
+        if (type === 'air' && params.get('airFpvos') && ['bridge', 'normal', 'reboot'].includes(request)) {
+          const refused = params.has('refuseMode') || request === 'bridge' && this.mode !== 'normal';
+          this.send(f, this.struct(68, (i32, str) => { i32(0, refused ? -1 : 0); str(4, refused ? 'bridge mode unsupported or failed to start' : 'OK'); }));
+          fake.rebootPayloads.push(request);
+          // ?modeLag=N: back from bridge, the unit still says bridge for N answers
+          if (!refused) reboot(request === 'bridge' ? 'bridge' : this.mode === 'bridge' && params.get('modeLag') ? 'unbridging' : 'normal');
+          return;
+        }
         this.send(f, this.custom ? this.struct(68, (i32, str) => { i32(0,0); str(4, type === 'p1' && request === 'clean' ? 'rebooting into clean RAM mode' : 'OK'); }) : undefined);
         fake.rebootPayloads.push(request);
         if (this.custom && request === 'clean') { if (type === 'p1') return reboot('clean'); this.mode = 'clean'; return; }
@@ -222,9 +237,10 @@
     }, 20);
   }
 
-  device = new FakeUnit('normal');
+  // ?airMode=bridge|clean: an fpvOS air unit found in that device mode
+  device = new FakeUnit(params.get('airMode') ?? 'normal');
   granted = [device.port];
-  fake.mode = 'normal';
+  fake.mode = device.mode;
 
   serial.getPorts = async () => granted.slice();
   serial.requestPort = async () => {

@@ -26,6 +26,7 @@ export const FPVOS_AR9311 = defineDevice({
     id: 'fpvos-ar9311', name: 'Ascent VRX · fpvOS', models: ['Ascent VRX · fpvOS'],
     usb: [{ usbVendorId: 0x1d6b, usbProductId: 0x0104 }],
     deviceVersion: () => null,
+    describe: () => ({ model: 'Caddx Ascent VRX', fpvos: true, firmware: 'fpvOS' }),
     identity: { matches: matchesFpvosAr9311, normalMatches: (a, b) => matchesFpvosAr9311(a) && matchesFpvosAr9311(b) },
     image: { pattern: /\.fwu$/i, detect: (b) => bundleForBoard(b, 485), parse: parseFpvosBundle,
       columns: ['Component', 'Size', 'Offset', 'Update flag'],

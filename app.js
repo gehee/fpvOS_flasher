@@ -1,8 +1,11 @@
-// fpvOS Flasher: Web Serial transport and UI over hardware profiles.
-import { LinkLostError } from './transports/ascent.js';
+// fpvOS Flasher: Web Serial transport and UI over hardware profiles. Connected,
+// the page shows the unit and one button that installs the fpvOS image published
+// for it (firmware/catalog.json); a file of your own is under More options.
+// Served from a build computer, it also offers the test builds in test-firmware/.
+import { LinkLostError, deviceModeOf, deviceModeRequest } from './transports/ascent.js';
 import { WebSerialLink } from './transports/web-serial.js';
 import {
-  PROFILES, USB_FILTERS, CONNECT_FILTERS, getProfile, profileForUsb, profileForDevice, preparationForUsb,
+  USB_FILTERS, CONNECT_FILTERS, getProfile, profileForUsb, profileForDevice, preparationForUsb,
 } from './devices/index.js';
 import { prepareFirmware, evaluateSelection, flashFirmware } from './flasher.js';
 import { formatBytes } from './devices/common.js';
@@ -20,14 +23,22 @@ const state = {
   session: null,
   info: null,
   profile: null,     // positively identified connected hardware, never a UI override
-  selectedProfile: null, // optional image/archive target while disconnected
   unlockOverride: null, // null = version-based automatic selection; boolean = manual choice
   p1Stage: null,     // stock P1 preparation: null | 'restart' (step 1 next) | 'recovery' (step 2 next) | 'done'
   connecting: false,
   image: null,       // { file, bytes, parsed, md5 }
   operation: null,
   preparing: false,
-  get busy() { return this.operation !== null || this.preparing; },
+  downloading: false,
+  catalog: undefined, // published releases, newest first; undefined while loading, null when none
+  pick: '',          // what the main button flashes: a release tag, 'file', 'test:<path>', or '' for nothing
+  localFile: null,   // the file the user chose, kept to go back to it from a release
+  tests: [],         // test builds in test-firmware/: [{ path, url }], newest folder first
+  testDir: false,    // whether the server has test-firmware/ (a build computer, not the published site)
+  testFile: null,    // the test build last downloaded: { path, file }
+  notice: null,      // shown above Connect after a device mode switch let go of the unit
+  expectMode: null,  // the device mode just asked for: the unit can come back before it is in it
+  get busy() { return this.operation !== null || this.preparing || this.downloading; },
   flashed: null,     // result line after a flash
 };
 
@@ -107,6 +118,16 @@ async function openPort(port) {
     state.profile = profileForDevice(state.info, port.getInfo());
     state.unlockOverride = null;
     log(`connected: ${state.info.firmware || state.info.name} (hw ${state.info.hardware}, sn ${state.info.serial})`);
+    // Back from bridge mode, the unit is on USB again before it has reloaded
+    // its radio, and says bridge until then: ask until it says the mode asked for.
+    const want = state.expectMode;
+    state.expectMode = null;
+    for (let i = 0; want && state.profile && deviceModeOf(state.info) && deviceModeOf(state.info) !== want && i < 15; i++) {
+      setUnitStatus('connecting', `Waiting for ${want} mode…`);
+      await new Promise((r) => setTimeout(r, 1000));
+      state.info = await state.session.deviceInfo({ timeoutMs: 3000 });
+    }
+    if (want) log(`the unit says ${deviceModeOf(state.info) ?? state.info.detail}`);
     setUnitStatus(state.profile ? 'ok' : 'error', state.profile ? 'Connected' : 'Connected device has no supported hardware profile.');
   } catch (e) {
     log(`no answer to FIND_DEVICE: ${e.message}`, 'error');
@@ -116,8 +137,13 @@ async function openPort(port) {
     state.link = state.session = state.info = state.profile = null;
   }
   state.connecting = false;
+  // a downloaded image belongs to the unit it was fetched for; a chosen file is
+  // checked again against whatever is connected now
+  if (state.image?.catalog) { state.image = null; state.flashed = null; }
+  if (!releasesFor(state.profile).some((e) => e.release === state.pick) && state.pick !== 'file'
+    && !testsFor(state.profile).some((t) => `test:${t.path}` === state.pick)) state.pick = '';
   render();
-  if (state.profile && state.image?.file && !state.selectedProfile) loadFile(state.image.file);
+  if (state.profile && state.image?.file) loadFile(state.image.file);
 }
 
 // closed is a new promise after every reopen, and a flash reopens on its own
@@ -220,18 +246,19 @@ async function prepareP1(loadRecovery, presetPort = null) {
 
 // --------------------------------------------------------------- firmware --
 
-// An image as is, or the one inside a .zip / .xz / .gz / .tar.
-async function loadFile(file) {
+// An image as is, or the one inside a .zip / .xz / .gz / .tar. catalog is the
+// published entry it was downloaded for, null for a file the user chose.
+async function loadFile(file, catalog = null) {
   if (!file || state.busy) return;
   state.unlockOverride = null;
   state.flashed = null;
-  const current = { file, loading: 'Opening' };
+  const current = { file, catalog, loading: 'Opening' };
   state.image = current;
   render();
   let opened;
   try {
     opened = await prepareFirmware(file, {
-      profile: state.selectedProfile ?? state.profile,
+      profile: state.profile,
       onProgress: (text) => {
         if (state.image !== current) return;
         current.loading = text;
@@ -240,28 +267,192 @@ async function loadFile(file) {
     });
   } catch (e) {
     if (state.image !== current) return;
-    state.image = { file, error: e.message };
+    state.image = { file, catalog, error: e.message };
     log(`file ${file.name}: ${e.message}`, 'error');
     render();
     return;
   }
   if (state.image !== current) return;   // another file was dropped meanwhile
   const { bytes, name, trail, parsed, md5 } = opened;
-  state.image = { file, ...opened };
+  state.image = { file, catalog, ...opened };
+  if (catalog && opened.md5 && opened.md5 !== catalog.md5) {
+    state.image = { file, catalog, error: 'The downloaded firmware is not the published one (MD5 differs). Reload the page and try again.' };
+  }
   log(`file ${[...trail, name].join(' > ')}: ${bytes.length} bytes, ${parsed.boardName ?? 'not an image'} `
     + `${parsed.versionText ?? ''}${md5 ? `, md5 ${md5}` : ''}`);
   render();
 }
 
+// ---------------------------------------------------------------- catalog --
+
+// The images this page offers, published next to it from the fpvOS releases:
+// firmware/catalog.json = { releases: [{ release, images: [{ devices: [profile id], file, name, size, md5 }] }] },
+// newest release first; file relative to firmware/, name the one it is sent as.
+async function loadCatalog() {
+  let catalog = null;
+  try {
+    const r = await fetch('firmware/catalog.json', { cache: 'no-cache' });
+    if (r.ok) catalog = await r.json();
+  } catch { /* none */ }
+  state.catalog = Array.isArray(catalog?.releases)
+    ? catalog.releases.filter((r) => r.release && Array.isArray(r.images)) : null;
+  if (state.catalog) log(`firmware releases: ${state.catalog.map((r) => r.release).join(', ')}`);
+  render();
+}
+
+// The published images for a unit, newest first: [{ release, ...image }]
+const releasesFor = (profile) => ((profile && state.catalog) || []).flatMap((r) => {
+  const image = r.images.find((i) => i.devices?.includes(profile.meta.id));
+  return image ? [{ ...image, release: r.release }] : [];
+});
+const pickedRelease = () => releasesFor(state.profile).find((e) => e.release === state.pick) ?? null;
+// a file of your own or a test build: flashed as it is, with all its checks shown
+const pickedIsFile = () => state.pick === 'file' || state.pick.startsWith('test:');
+const pickedFile = () => state.pick === 'file' ? state.localFile
+  : state.testFile && state.pick === `test:${state.testFile.path}` ? state.testFile.file : null;
+
+async function download(url, name, size, onProgress) {
+  const r = await fetch(url, { cache: 'no-cache' });
+  if (!r.ok) throw new Error(`the server answered ${r.status}`);
+  const total = size || Number(r.headers.get('content-length')) || 0;
+  const reader = r.body.getReader();
+  const parts = [];
+  for (let got = 0; ;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value);
+    got += value.length;
+    if (total) onProgress(Math.min(got / total, 1));
+  }
+  return new File(parts, name);
+}
+
+// ------------------------------------------------------------ test builds --
+
+// Images just built, before any release: on the build computer, test-firmware/
+// next to index.html (a folder, or a link to the build output) served with a
+// directory listing (python3 -m http.server). Its files and those of the folders
+// in it are offered as test builds. The published site has no such folder.
+const TEST_DIR = new URL('test-firmware/', location.href);
+const TEST_FILE = /\.(img|fwu|zip|xz|gz|tgz|tar)$/i;
+
+// the links of a directory listing to what is inside it, null for no listing
+async function listDir(dir) {
+  const r = await fetch(dir, { cache: 'no-cache' });
+  if (!r.ok || !/html/.test(r.headers.get('content-type') ?? '')) return null;
+  const doc = new DOMParser().parseFromString(await r.text(), 'text/html');
+  const urls = [...doc.querySelectorAll('a[href]')].map((a) => new URL(a.getAttribute('href'), dir))
+    .filter((u) => !u.search && !u.hash && u.href.startsWith(dir.href) && u.href !== dir.href);
+  return [...new Map(urls.map((u) => [u.href, u])).values()];
+}
+
+async function loadTests() {
+  const found = [];
+  try {
+    const top = await listDir(TEST_DIR);
+    state.testDir = !!top;
+    for (const u of top ?? []) {
+      found.push(...((u.pathname.endsWith('/') ? await listDir(u) : [u]) ?? []).filter((f) => !f.pathname.endsWith('/')));
+    }
+  } catch { /* none */ }
+  // the VRX Pro installs from an SD card, not from this page
+  state.tests = found.map((url) => ({ url, path: decodeURIComponent(url.href.slice(TEST_DIR.href.length)) }))
+    .filter((t) => TEST_FILE.test(t.path) && !/vrxpro/i.test(t.path))
+    .sort((a, b) => (a.path < b.path ? 1 : -1));
+  if (state.tests.length) log(`test builds in ${TEST_DIR.pathname}: ${state.tests.map((t) => t.path).join(', ')}`);
+  render();
+}
+
+// The test builds a unit can take, by name: its own image (fpvOS-<version>-
+// Ascent_H_Sky_18_21_10.img), an fpvOS bundle for a bundle profile or a stock VRX
+// (which the RAM updater takes to fpvOS), or an archive (the page picks inside).
+const testsFor = (profile) => (profile ? state.tests : []).filter(({ path }) => {
+  const name = path.split('/').pop().toLowerCase(), prefix = profile.meta.image.prefix?.toLowerCase();
+  if (name.endsWith('.fwu')) return !prefix || profile.meta.id === 'ascent-vrx';
+  if (name.endsWith('.img')) return !!prefix && name.includes(prefix);
+  return true;
+});
+
+// Fetched again on every pick, so a rebuilt image under the same name is the new one.
+async function loadTest(path) {
+  const test = state.tests.find((t) => t.path === path);
+  if (!test || state.busy) return;
+  const text = `Fetching ${path}`;
+  state.downloading = true;
+  render();
+  setProgress({ stage: 'download', frac: 0, text });
+  try {
+    const file = await download(test.url, path.split('/').pop(), 0, (frac) => setProgress({ stage: 'download', frac, text }));
+    state.testFile = { path, file };
+    log(`fetched test build ${path}: ${formatBytes(file.size)}`);
+  } catch (e) {
+    state.flashed = { ok: false, text: `Could not fetch ${path} (${e.message}).` };
+    log(`test build ${path}: ${e.message}`, 'error');
+    setProgress({ stage: 'failed', frac: null, text: 'Failed' });
+    return;
+  } finally {
+    state.downloading = false;
+    render();
+  }
+  if (state.pick === `test:${path}`) loadFile(state.testFile.file);
+}
+
+// A file of your own: it becomes the selection, checked against the unit.
+function chooseLocal(file) {
+  if (!file || state.busy) return;
+  state.localFile = file;
+  state.pick = 'file';
+  loadFile(file);
+}
+
+function pick(value) {
+  if (state.busy) return;
+  state.pick = value;
+  state.flashed = null;
+  state.unlockOverride = null;
+  if (value.startsWith('test:')) loadTest(value.slice(5));
+  else if (value === 'file' && state.localFile && state.image?.file !== state.localFile) loadFile(state.localFile);
+  else render();
+}
+
+// The main button: the chosen file as it is, or the chosen release downloaded,
+// checked against the published MD5, then the same flash.
+async function go() {
+  if (pickedIsFile()) { await flash(); return; }
+  const entry = pickedRelease();
+  if (!entry || !state.session || state.busy || state.connecting) return;
+  const text = `Downloading fpvOS ${entry.release}`;
+  state.downloading = true;
+  state.flashed = null;
+  render();
+  setProgress({ stage: 'download', frac: 0, text });
+  let file;
+  try {
+    file = await download(new URL(entry.file, new URL('firmware/', location.href)), entry.name, entry.size,
+      (frac) => setProgress({ stage: 'download', frac, text }));
+    log(`downloaded ${entry.file}: ${formatBytes(file.size)}`);
+  } catch (e) {
+    state.flashed = { ok: false, text: `The download failed (${e.message}). Check the internet connection and try again.` };
+    log(`download ${entry.file}: ${e.message}`, 'error');
+    setProgress({ stage: 'failed', frac: null, text: 'Failed' });
+    return;
+  } finally {
+    state.downloading = false;
+    render();
+  }
+  await loadFile(file, entry);
+  if (state.image?.catalog === entry && state.pick === entry.release && canFlash()) await flash();
+}
+
 // Problems from the image and the unit together: [{level, text}]
 function selection() {
   return state.operation?.plan ?? evaluateSelection({ info: state.info, profile: state.profile, image: state.image,
-    selectedProfile: state.selectedProfile, unlockOverride: state.unlockOverride });
+    unlockOverride: state.unlockOverride });
 }
 
 // ------------------------------------------------------------------ flash --
 
-const STAGES = ['unlock', 'clean', 'upload', 'install', 'restart'];
+const STAGES = ['download', 'unlock', 'clean', 'upload', 'install', 'restart'];
 let abort = null;
 
 async function flash() {
@@ -270,9 +461,12 @@ async function flash() {
   const profile = state.profile;
   const session = state.session, info = state.info, plan = selection();
   const unlock = plan.unlockSelected;
-  const ok = await ask(`${unlock ? 'Unlock and flash' : 'Flash'} ${img.parsed.remoteName}?`,
+  const model = profile.meta.describe(info).model;
+  const title = img.catalog ? `Install fpvOS ${img.catalog.release} on your ${model}?`
+    : `${unlock ? 'Unlock and flash' : 'Flash'} ${img.parsed.remoteName}?`;
+  const ok = await ask(title,
     `${plan.bootstrapSelected ? 'Upload the experimental RAM updater, then select this VRX’s new USB port. Disconnect other VRXs. No backup export is performed. ' : ''}${unlock ? profile.meta.unlock.notice + ' ' : ''}${plan.executionProfile.meta.notices.flash} This flasher is experimental: use it at your own risk.`,
-    unlock ? 'Unlock and flash' : 'Flash');
+    img.catalog ? 'Install' : unlock ? 'Unlock and flash' : 'Flash');
   if (!ok || !canFlash() || state.image !== img || state.profile !== profile || state.session !== session
     || state.info !== info || selection().unlockSelected !== unlock) return;
 
@@ -289,8 +483,9 @@ async function flash() {
       progress: setProgress, log, signal: abort.signal,
     });
     const secs = Math.round((Date.now() - t0) / 1000);
-    state.flashed = { ok: true, text: after
-      ? `Flashed in ${secs} s. The device now reports ${after.firmware || after.name}.`
+    state.flashed = { ok: true, text: img.catalog
+      ? `Done in ${secs} s: your ${model} runs fpvOS ${img.catalog.release}.${after ? '' : ' It is restarting.'}`
+      : after ? `Flashed in ${secs} s. The device now reports ${after.firmware || after.name}.`
       : `Flashed in ${secs} s. The device is restarting; reconnect to check it.` };
     if (after) { state.info = after; state.profile = profileForDevice(after, state.link.port.getInfo()); state.unlockOverride = null; }
     log(state.flashed.text);
@@ -337,6 +532,55 @@ async function networkMode() {
   log('asked the device to switch to network mode');
 }
 
+// What each mode is, under the switch, and what to expect after switching.
+const DEVICE_MODE_ABOUT = Object.freeze({
+  normal: 'Normal: the unit flies with its own radio.',
+  bridge: 'Bridge: its AR8030 radio chip is on USB, for a computer to use as its own. '
+    + 'It stays in bridge mode, also after a power cycle, until you switch it back here.',
+});
+const DEVICE_MODE_ASK = Object.freeze({
+  normal: 'The unit stops being a USB radio and flies with its own radio again.',
+  bridge: 'The unit stops its own radio and video, and its AR8030 shows up on USB for the device it is '
+    + 'plugged into. It stays that way, also after a power cycle, until you switch it back to normal here.',
+});
+// back in normal mode the page shows the unit again by itself: nothing to say
+const DEVICE_MODE_DONE = Object.freeze({
+  normal: null,
+  bridge: 'The unit is in bridge mode: plug it into the device that uses its radio. To switch it back, connect it here again.',
+});
+
+async function switchDeviceMode(to) {
+  const from = deviceModeOf(state.info), name = deviceModeRequest(from, to);
+  const session = state.session;
+  if (!session || !name || state.busy || !state.profile?.transport.protocol.deviceMode) return;
+  const restart = from === 'update';
+  if (!restart && !await ask(`Switch to ${to} mode?`, DEVICE_MODE_ASK[to], 'Switch')) return;
+  if (state.session !== session || state.busy) return;
+  try {
+    const r = await state.profile.transport.protocol.deviceMode(session, name);
+    if (r.status !== 0) {
+      state.flashed = { ok: false, text: `The unit refused ${to} mode: ${r.detail || `status ${r.status}`}.` };
+      log(`${to} mode refused: ${r.detail || `status ${r.status}`}`, 'error');
+      render();
+      return;
+    }
+    log(`the unit is switching to ${to} mode${r.detail ? ` (${r.detail})` : ''}`);
+  } catch (e) {
+    if (!(e instanceof LinkLostError)) {
+      state.flashed = { ok: false, text: `Switching to ${to} mode failed: ${e.message}` };
+      log(`${to} mode: ${e.message}`, 'error');
+      render();
+      return;
+    }
+    log(`the unit went away while switching to ${to} mode`, 'warn');
+  }
+  // The unit re-enumerates (bridge mode under other USB IDs): this port is done.
+  state.notice = restart ? 'The unit is restarting normally. Connect it again in a few seconds.' : DEVICE_MODE_DONE[to];
+  state.expectMode = to;
+  await state.link?.close().catch(() => {});
+  render();
+}
+
 function ask(title, text, okLabel) {
   const d = $('ask');
   $('ask-title').textContent = title;
@@ -361,15 +605,66 @@ function render() {
       + `chrome://flags enable "Insecure origins treated as secure" for ${location.origin}, then relaunch Chrome.`;
   }
 
-  // unit
+  // nothing connected: Connect and its help; connected: the unit
   const info = state.info;
-  $('connect').hidden = !!state.link;
+  $('start').hidden = !!state.link;
+  $('device').hidden = !state.link;
   $('connect').disabled = !supported || state.busy || state.connecting;
-  $('disconnect').hidden = !state.link;
   $('disconnect').disabled = state.busy || state.connecting;
+  $('developer').hidden = !new URLSearchParams(location.search).has('dev');
+  if (state.link) state.notice = null;
+  $('start-note').hidden = !state.notice;
+  $('start-note').textContent = state.notice ?? '';
+
+  // fpvOS's device modes: the switch, or the way out of update mode. In bridge
+  // mode the radio is another device's: nothing to install until it is back.
+  const deviceMode = state.session && state.profile?.transport.protocol.deviceMode ? deviceModeOf(state.info) : null;
+  // the switch, under Advanced, on firmware that keeps bridge mode, and always
+  // for a unit already in it: then the only way back, so Advanced opens
+  $('advanced').hidden = !(deviceMode === 'bridge' || deviceMode === 'normal' && state.profile.meta.deviceModes?.(state.info));
+  if (deviceMode === 'bridge' && $('advanced').dataset.mode !== 'bridge') $('advanced').open = true;
+  $('advanced').dataset.mode = deviceMode ?? '';
+  for (const to of ['normal', 'bridge']) {
+    $(`mode-${to}`).setAttribute('aria-checked', String(deviceMode === to));
+    $(`mode-${to}`).disabled = state.busy || state.connecting || !deviceModeRequest(deviceMode, to) && deviceMode !== to;
+  }
+  $('device-mode-note').textContent = DEVICE_MODE_ABOUT[deviceMode] ?? '';
+  $('update-mode').hidden = deviceMode !== 'update';
+  $('mode-restart').disabled = state.busy || state.connecting;
+  $('firmware').hidden = deviceMode === 'bridge';
+  const about = info && state.profile ? state.profile.meta.describe(info) : null;
+  $('device-name').textContent = about?.model ?? (info ? 'Unsupported device' : 'Connecting…');
+  $('device-firmware').textContent = about ? `Runs ${about.firmware}` : '';
+
+  // what to flash: the newest release for this unit unless something else was chosen
+  const releases = releasesFor(state.profile);
+  if (!state.pick && releases.length) state.pick = releases[0].release;
+  if (!state.pick && state.localFile) state.pick = 'file';
+  const options = [...releases.map((e, i) => [e.release, `fpvOS ${e.release}${i ? '' : ' · latest'}`]),
+    // a test build's folder (one per build) is a line under its name in the list
+    ...testsFor(state.profile).map((t) => [`test:${t.path}`, `${t.path.split('/').pop()} · test`,
+      t.path.includes('/') ? t.path.slice(0, t.path.lastIndexOf('/')) : '']),
+    ...(state.localFile ? [['file', `Local file: ${state.localFile.name}`]] : [])];
+  // only test builds: none is fetched before it is chosen
+  if (!state.pick && options.length) options.unshift(['', 'Choose a test build']);
+  if (!options.length) options.push(['', state.catalog === undefined ? 'Looking for fpvOS releases…' : 'No fpvOS release for this device']);
+  const key = JSON.stringify(options);
+  if ($('release').dataset.key !== key) {
+    $('release').dataset.key = key;
+    $('release').replaceChildren(...options.map(([value, text, sub]) => {
+      const o = el('option', text);
+      o.value = value;
+      if (sub) o.dataset.sub = sub;
+      return o;
+    }));
+  }
+  $('release').value = state.pick;
+  $('release').disabled = state.busy || state.connecting || options.length < 2;
+  renderPicker();
+  $('choose-file').disabled = state.busy;
   $('netmode').disabled = !state.session || !state.profile?.transport.protocol.networkMode || state.busy || state.connecting;
-  $('profile').disabled = state.busy;
   const p1Available = supported && 'hid' in navigator;
+  $('p1-preparation').hidden = state.p1Stage == null;
   $('p1-browser-support').hidden = p1Available;
   $('p1-stock-confirm').disabled = state.busy;
   // Walk the two steps: exactly one is the lit, clickable action; the finished
@@ -378,8 +673,8 @@ function render() {
   setP1Step($('p1-enter-bootloader'), p1Ready && state.p1Stage === 'restart', state.p1Stage === 'recovery' || state.p1Stage === 'done');
   setP1Step($('p1-load-recovery'), p1Ready && state.p1Stage === 'recovery', state.p1Stage === 'done');
   $('p1-preparation-cancel').hidden = !state.preparing;
-  const unlockFeature = state.profile?.meta.unlock ?? state.selectedProfile?.meta.unlock;
-  $('unlock-options').hidden = !unlockFeature;
+  const unlockFeature = state.profile?.meta.unlock;
+  $('unlock-options').hidden = !unlockFeature || !pickedIsFile();
   $('unlock-before-flash').disabled = state.busy || !plan.unlockAvailable;
   $('unlock-before-flash').checked = plan.unlockSelected;
   $('unlock-label').textContent = unlockFeature?.label ?? '';
@@ -389,28 +684,31 @@ function render() {
     : !state.image?.md5 || state.image.parsed.profileId !== state.profile.meta.id ? 'Choose a valid matching image to compare with the connected firmware. You can also select unlock manually.'
     : 'Automatically off for equal/newer images. You can enable it manually; signed firmware validation remains enabled.';
   $('stage-unlock').hidden = !plan.unlockSelected;
-  $('profile-hint').textContent = state.selectedProfile ? `Image target: ${state.selectedProfile.meta.name}.`
-    : state.profile ? `Detected: ${state.profile.meta.name}.`
-    : 'Connect a device to select its image from an archive, or choose a profile for offline checks.';
+  $('profile-hint').textContent = state.profile ? `Detected: ${state.profile.meta.name}.`
+    : 'Connect a device to select its image from an archive.';
   $('unit-info').hidden = !info;
   if (info) {
     const rows = [
       ['Profile', state.profile?.meta.name ?? 'unsupported'],
-      ['Firmware', info.firmware],
+      // an fpvOS unit reports a stock firmware name for the vendor's tools
+      ['Firmware', about?.fpvos ? about.firmware : info.firmware],
+      ['Reported as', about?.fpvos ? info.firmware : ''],
       ['Device', info.name],
       ['Hardware', info.hardware],
       ['Serial', info.serial],
-      ['SDK', info.sdk],
+      ['SDK', about?.fpvos ? '' : info.sdk],
       ['CPU temperature', info.cpuTemp != null ? `${info.cpuTemp} °C` : ''],
       ['Max chunk', info.maxChunk ? formatBytes(info.maxChunk) : ''],
     ].filter(([, v]) => v);
     $('unit-info').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', k), el('dd', v)]));
   }
 
-  // firmware
-  const img = state.image;
-  $('drop').classList.toggle('loaded', !!img);
-  $('drop').classList.toggle('disabled', state.busy);
+  // the chosen file's details; a downloaded release is shown only by its checks
+  const image = state.image;
+  const fromCatalog = !!image?.catalog;
+  const img = fromCatalog ? null : image;
+  const current = pickedIsFile() ? !!img && img.file === pickedFile() : fromCatalog && image.catalog.release === state.pick;
+  $('image-details').hidden = !pickedIsFile() || !current;
   $('file').disabled = state.busy;
   $('file-info').hidden = !img;
   $('file-status').hidden = !img?.loading;
@@ -430,30 +728,102 @@ function render() {
     }));
   }
 
-  // checks
-  const cs = plan.issues;
-  $('checks').replaceChildren(...cs.map((c) => {
+  // checks of what is selected: all of them for a file, only what needs
+  // attention for a published release
+  const cs = current ? plan.issues : [];
+  const shown = fromCatalog ? cs.filter((c) => c.level !== 'info') : cs;
+  $('checks').replaceChildren(...shown.map((c) => {
     const li = el('li', c.text);
     li.dataset.level = c.level;
     return li;
   }));
-  $('checks').hidden = !cs.length;
+  $('checks').hidden = !shown.length;
 
-  // flash
-  $('flash').disabled = !canFlash();
-  $('flash').textContent = state.operation ? 'Flashing…' : plan.unlockSelected ? 'Unlock and flash' : 'Flash';
+  // the main button
+  const entry = pickedRelease();
+  const installed = !!state.flashed?.ok && current;
+  const errors = cs.some((c) => c.level === 'error');
+  $('flash').hidden = installed;
+  $('flash').disabled = state.busy || state.connecting || !state.session
+    || (pickedIsFile() ? !current || !canFlash() : !entry);
+  $('flash').textContent = state.downloading ? 'Downloading…'
+    : state.operation ? (fromCatalog ? 'Installing…' : 'Flashing…')
+    : pickedIsFile() ? (plan.unlockSelected ? 'Unlock and flash' : 'Flash this file')
+    : entry ? `Install fpvOS ${entry.release}` : 'Install';
   $('cancel').hidden = !state.operation || !['unlock', 'clean', 'upload'].includes(currentStage);
-  $('progress').hidden = !state.operation && !state.flashed;
+  $('progress').hidden = !state.operation && !state.downloading && !state.flashed;
+  $('keep-plugged').hidden = !state.operation;
+  $('stage-download').hidden = !fromCatalog && !state.downloading;
   $('result').hidden = !state.flashed;
+  $('result-log').hidden = !state.flashed || state.flashed.ok;
   if (state.flashed) {
     $('result').dataset.ok = state.flashed.ok;
     $('result').textContent = state.flashed.text;
   }
   $('hint').textContent = !state.link ? 'Connect a device first.'
-    : !img ? 'Choose a firmware image.'
-    : img.loading ? 'Unpacking the firmware.'
-    : cs.some((c) => c.level === 'error') ? 'Fix the problems above first.'
-    : '';
+    : state.busy || state.connecting ? ''
+    : installed ? 'Done. You can unplug the device.'
+    : !state.pick ? (state.catalog === undefined ? 'Looking for fpvOS releases…'
+      : testsFor(state.profile).length ? 'Choose a test build, or a local file.'
+      : state.testDir ? 'No fpvOS release and no test build in test-firmware/ for this device. Choose a local file.'
+      : 'This page has no fpvOS release for this device yet. Choose a local file.')
+    : pickedIsFile() ? (!current ? 'Choose a firmware image.' : img.loading ? 'Unpacking the firmware.'
+      : errors ? 'Fix the problems above first.' : '')
+    : errors ? 'This release cannot be installed on this device.'
+    : about?.fpvos ? 'It already runs fpvOS: this installs the chosen release over it.' : '';
+}
+
+// The firmware list, drawn by the page over the hidden select: a button that
+// shows the choice, and a list that opens under it (mouse or arrow keys).
+// A long name is cut short in the button and wraps in the list; tags stay whole.
+function pickerItem(option, i) {
+  const [name, ...tags] = option.textContent.split(' · ');
+  const li = document.createElement('li');
+  const label = el('span', name, 'name');
+  if (option.dataset.sub && i >= 0) label.append(el('small', option.dataset.sub));
+  li.append(label);
+  li.id = `release-option-${i}`;
+  li.setAttribute('role', 'option');
+  li.dataset.value = option.value;
+  li.setAttribute('aria-selected', String(option.value === $('release').value));
+  for (const t of tags) li.append(el('span', t, 'tag'));
+  return li;
+}
+
+function renderPicker() {
+  const select = $('release'), button = $('release-button'), list = $('release-list');
+  const options = [...select.options];
+  const chosen = options.find((o) => o.value === select.value) ?? options[0];
+  button.replaceChildren(...(chosen ? [...pickerItem(chosen, -1).childNodes] : []));
+  button.disabled = select.disabled;
+  if (select.disabled) closePicker();
+  list.replaceChildren(...options.map(pickerItem));
+}
+
+let pickerActive = -1;
+function openPicker() {
+  if ($('release-button').disabled) return;
+  const items = [...$('release-list').children];
+  $('release-list').hidden = false;
+  $('release-button').setAttribute('aria-expanded', 'true');
+  setPickerActive(Math.max(0, items.findIndex((li) => li.getAttribute('aria-selected') === 'true')));
+}
+function closePicker() {
+  $('release-list').hidden = true;
+  $('release-button').setAttribute('aria-expanded', 'false');
+}
+function setPickerActive(i) {
+  const items = [...$('release-list').children];
+  pickerActive = Math.min(Math.max(i, 0), items.length - 1);
+  items.forEach((li, n) => li.classList.toggle('active', n === pickerActive));
+  items[pickerActive]?.scrollIntoView({ block: 'nearest' });
+  $('release-button').setAttribute('aria-activedescendant', items[pickerActive]?.id ?? '');
+}
+function choosePicked(value) {
+  closePicker();
+  if (value == null) return;
+  $('release-button').focus();
+  if (value !== $('release').value) { $('release').value = value; $('release').dispatchEvent(new Event('change')); }
 }
 
 function el(tag, text, cls) {
@@ -474,17 +844,9 @@ function setP1Step(btn, active, done) {
 // ------------------------------------------------------------------ wiring --
 
 function init() {
-  for (const p of PROFILES) {
-    const option = el('option', p.meta.name); option.value = p.meta.id;
-    $('profile').append(option);
-  }
-  $('profile').onchange = () => {
-    state.unlockOverride = null;
-    state.selectedProfile = getProfile($('profile').value);
-    if (state.image?.file) loadFile(state.image.file);
-    else render();
-  };
   render();
+  loadCatalog();
+  loadTests();
   if (!('serial' in navigator)) return;
 
   $('connect').onclick = connect;
@@ -497,8 +859,31 @@ function init() {
   $('p1-preparation-cancel').onclick = () => preparationAbort?.abort();
   $('disconnect').onclick = disconnect;
   $('netmode').onclick = networkMode;
+  for (const to of ['normal', 'bridge']) $(`mode-${to}`).onclick = () => { if (deviceModeOf(state.info) !== to) switchDeviceMode(to); };
+  $('mode-restart').onclick = () => switchDeviceMode('normal');
   $('reselect').onclick = reselect;
-  $('flash').onclick = flash;
+  $('flash').onclick = go;
+  $('release').onchange = () => pick($('release').value);
+  $('release-button').onclick = () => ($('release-list').hidden ? openPicker() : closePicker());
+  $('release-list').onclick = (e) => { const li = e.target.closest('li'); if (li) choosePicked(li.dataset.value); };
+  $('release-list').onmousemove = (e) => {
+    const li = e.target.closest('li');
+    if (li) setPickerActive([...$('release-list').children].indexOf(li));
+  };
+  $('release-button').onkeydown = (e) => {
+    const open = !$('release-list').hidden;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!open) openPicker();
+      else setPickerActive(pickerActive + (e.key === 'ArrowDown' ? 1 : -1));
+    } else if (open && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      choosePicked($('release-list').children[pickerActive]?.dataset.value);
+    } else if (open && (e.key === 'Escape' || e.key === 'Tab')) closePicker();
+  };
+  document.addEventListener('click', (e) => { if (!e.target.closest('.picker')) closePicker(); });
+  $('choose-file').onclick = () => $('file').click();
+  $('result-log').onclick = () => navigator.clipboard.writeText(logText());
   $('unlock-before-flash').onchange = () => { state.unlockOverride = $('unlock-before-flash').checked; render(); };
   $('cancel').onclick = () => { abort?.abort(); log('cancelling after the current step', 'warn'); };
   // cleared after each pick: choosing the same file again fires no change
@@ -506,7 +891,7 @@ function init() {
   $('file').onchange = (e) => {
     const f = e.target.files[0];
     e.target.value = '';
-    loadFile(f);
+    chooseLocal(f);
   };
   $('verbose').onchange = () => {
     $('log').replaceChildren();
@@ -521,20 +906,11 @@ function init() {
     URL.revokeObjectURL(a.href);
   };
 
-  const drop = $('drop');
-  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
-  drop.ondragleave = () => drop.classList.remove('over');
-  drop.ondrop = (e) => {
-    e.preventDefault();
-    drop.classList.remove('over');
-    loadFile(e.dataTransfer.files[0]);
-  };
-
   window.addEventListener('beforeunload', (e) => { if (state.busy) e.preventDefault(); });
-  // a file dropped outside the drop zone (or on it while flashing) would make
-  // the browser open the file and leave the page
+  // a file dropped anywhere on the page is a local file; the browser would
+  // otherwise open it and leave the page
   window.addEventListener('dragover', (e) => e.preventDefault());
-  window.addEventListener('drop', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => { e.preventDefault(); chooseLocal(e.dataTransfer.files[0]); });
 
   // plug in = connect, for a unit this page was allowed before
   navigator.serial.addEventListener('connect', (e) => {
