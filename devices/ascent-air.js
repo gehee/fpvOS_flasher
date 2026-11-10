@@ -120,6 +120,10 @@ export const ASCENT_AIR = defineDevice({
     usb: [{ usbVendorId: 0x1d76, usbProductId: 0x0101 }, { usbVendorId: 0x4152, usbProductId: 0x8030 },
       { usbVendorId: 0x1d6b, usbProductId: 0x8030 }],
     deviceModes: keepsBridgeMode,
+    // Whether a unit on this fpvOS release says it runs fpvOS (its updater's
+    // device mode). Releases before fpvOS's own updater for the Lite (all up
+    // to beta4) keep stock's, which answers as stock does: no telling then.
+    releaseAnswers: (release) => keepsBridgeMode({ sdk: release }),
     describe: (info) => ({ model: airModel(info), fpvos: runsFpvos(info), firmware: runsFpvos(info) ? fpvosVersion(info) : stockFirmware(info) }),
     identity: { matches: matchesAir, normalMatches: airNormalMatches, updateMatches: airUpdateMatches },
     image: aswImage({ prefix: 'Ascent_H_Sky', board: 3, parse: parseAirImage,

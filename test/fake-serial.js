@@ -113,7 +113,8 @@
         const current = this.mode === 'unlocked' && !params.has('unlockFails') ? 'Ascent_G_Gnd_0_0_0' : firmware;
         // ?airFpvos=VERSION: an air unit on fpvOS's updater (its version in the
         // SDK field), which keeps the unit's identity in update mode too
-        const airFpvos = type === 'air' && params.get('airFpvos');
+        // ?installsFpvos=VERSION: one once an image is installed (restarted into)
+        const airFpvos = type === 'air' && (params.get('airFpvos') || fake.fpvosInstalled);
         const airClean = type === 'air' && this.mode === 'clean' && !airFpvos;
         return this.send(f, this.struct(300, (i32, str) => {
           i32(0, 1 << 20); str(4, airFpvos || (airClean ? '' : current.split('_').slice(-3).join('.'))); str(36, airClean ? 'Ascent' : factory.name); i32(100, airClean ? 0 : 51);
@@ -207,6 +208,7 @@
         if (!failed && this.status >= 100) {
           firmware = this.nextFirmware;
           if (type === 'air') {
+            if (params.get('installsFpvos')) fake.fpvosInstalled = params.get('installsFpvos');
             const lite = firmware === 'Ascent_H_Sky_18_21_10';
             Object.assign(factory, { name: lite ? 'Ascent_lite' : 'Ascent_H_Sky', serial: lite ? '1_FAKE0001' : 'FAKE0001',
               hardware: `FPV-Ascent-Sky-482-V1.3-${lite ? '1.1' : '1.0'}` });

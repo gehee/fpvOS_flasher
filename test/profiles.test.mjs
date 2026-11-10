@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseVrx, verifyDigestTail } from '../devices/ascent-vrx.js';
 import { getProfile, profileForDevice, profileForUsb, profileForImage } from '../devices/index.js';
-import { prepareFirmware, evaluateSelection, flashFirmware } from '../flasher.js';
+import { prepareFirmware, evaluateSelection, flashFirmware, installResult } from '../flasher.js';
 import { CMD, md5hex } from '../transports/ascent.js';
 import { openSimulatedDevice } from './sim.mjs';
 import { airImage, vrxImage, signVrx, TEST_VRX_KEY, VRX_TABLE, VRX_SEGMENTS, storedZip } from './fixtures.mjs';
@@ -329,4 +329,36 @@ test('the device mode switch is offered from fpvOS 2026.10.beta4-45 on', async (
     '2026.10.beta5-3-g1234567', '2026.10', '2026.11.beta1', '2027.01']) assert.equal(keepsBridgeMode({ sdk }), true, sdk);
   for (const sdk of ['', '2026.10.beta4', '2026.10.beta4-44-g4372d89-dirty', '2026.10.beta3-29-g897a489', '2026.09',
     'development', '2026.10.beta4-45-gZZZ', '18.21.10']) assert.equal(keepsBridgeMode({ sdk }), false, sdk);
+});
+
+test('an fpvOS install is said to run only when the unit says so', () => {
+  const air = getProfile('ascent-air').meta;
+  const stock = air.describe({ firmware: 'Ascent_H_Sky_18_21_10', detail: 'OK' });
+  const fpvos = air.describe({ firmware: 'Ascent_H_Sky_18_21_10', detail: 'normal mode', sdk: '2026.10.beta5' });
+  const base = { model: 'Caddx Ascent Lite', secs: 40, answers: air.releaseAnswers };
+  // the unit back on fpvOS's updater
+  let r = installResult({ ...base, release: '2026.10.beta5', now: fpvos });
+  assert.equal(r.ok, true);
+  assert.match(r.text, /runs fpvOS 2026\.10\.beta5/);
+  // back answering as stock, from a release whose updater would have said fpvOS
+  r = installResult({ ...base, release: '2026.10.beta5', now: stock });
+  assert.equal(r.ok, false);
+  assert.doesNotMatch(r.text, /runs fpvOS/);
+  assert.match(r.text, /not fpvOS/);
+  // ...from beta4, which keeps stock's updater: no telling, no claim either way
+  r = installResult({ ...base, release: '2026.10.beta4', now: stock });
+  assert.equal(r.ok, true);
+  assert.doesNotMatch(r.text, /runs fpvOS|not fpvOS/);
+  assert.match(r.text, /cannot tell/);
+  // not back at all
+  for (const release of ['2026.10.beta4', '2026.10.beta5']) {
+    r = installResult({ ...base, release, now: null });
+    assert.equal(r.ok, true);
+    assert.doesNotMatch(r.text, /^Done|: your .* runs fpvOS/);
+    assert.match(r.text, /restarting/);
+  }
+  // the AR9311 units' fpvOS profiles: verified by their package's SHA-256, so fpvOS
+  const p1 = getProfile('fpvos-p1-air').meta;
+  r = installResult({ model: 'BETAFPV P1 Air', release: '2026.11', secs: 60, now: p1.describe({}), answers: p1.releaseAnswers });
+  assert.match(r.text, /runs fpvOS 2026\.11/);
 });

@@ -116,8 +116,10 @@ Then open <http://localhost:8000>:
 The images come from the newest [fpvOS release](https://github.com/gehee/fpvOS/releases):
 the Pages deploy downloads them and publishes them in `firmware/` with
 `firmware/catalog.json` (`tools/make-catalog.mjs`), because a browser cannot
-download release files from GitHub's asset host. A device with no image there
-shows no Install button.
+download release files from GitHub's asset host. Only devices whose install
+is proven on hardware are listed there (the Ascent Lite / Lite+ for now): a
+VRX or P1 `.fwu` stays a file of your own or a test build. A device with no
+image there shows no Install button.
 
 To flash a file of your own, open **More options** and drop a firmware image,
 read the checks it shows, and click **Flash this file**. An archive holding one

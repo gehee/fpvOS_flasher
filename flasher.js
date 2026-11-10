@@ -44,6 +44,19 @@ function unsupportedImage(bytes, profile) {
   return what + wanted;
 }
 
+// What an install of fpvOS `release` came to, from what the unit said once it
+// was back (now: its profile's describe() of it; null: it did not answer):
+// {ok, text}. "Runs fpvOS" only once the unit says so. One answering as stock
+// failed - unless the release keeps stock's updater (answers(release) false),
+// which answers the same either way.
+export function installResult({ model, release, secs, now, answers = () => true }) {
+  if (now?.fpvos) return { ok: true, text: `Done in ${secs} s: your ${model} runs fpvOS ${release}.` };
+  const tells = answers(release);
+  if (now && tells) return { ok: false, text: `Flashed in ${secs} s, but your ${model} came back on ${now.firmware}, not fpvOS: it may have started its other copy of the firmware. Install it again.` };
+  if (now) return { ok: true, text: `Installed in ${secs} s. Your ${model} answers as ${now.firmware} does, as every unit on fpvOS ${release} does (it keeps stock's updater), so this page cannot tell which one it started: the goggle's INFO tab says.` };
+  return { ok: true, text: `Installed in ${secs} s. Your ${model} is restarting: ${tells ? `reconnect it to check that it runs fpvOS ${release}` : 'the goggle\'s INFO tab will say which firmware it runs'}.` };
+}
+
 export function evaluateSelection({ info = null, profile = null, image = null, selectedProfile = null, unlockOverride = null } = {}) {
   const parsed = image?.parsed;
   const issues = [];

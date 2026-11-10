@@ -6,11 +6,20 @@
 //   node tools/make-catalog.mjs --release 2026.10.beta5 [--out firmware] IMAGE...
 // The Pages deploy runs it on every fpvOS release's files: a browser cannot
 // download them from the release page itself (no CORS on GitHub's asset host).
-// A stock-to-fpvOS VRX bundle is offered to stock VRXs too (the page uploads
-// the RAM updater first, as for a chosen file).
+// The newest release is the page's one-click Install, so only the devices
+// whose install is proven on hardware are listed (PROVEN); the rest stay a
+// chosen file or a test build. A stock-to-fpvOS VRX bundle would be offered to
+// stock VRXs too (the page uploads the RAM updater first, as for a chosen
+// file) once both are listed. Each device's image goes in a folder of its own:
+// every .fwu is sent as fpvos.fwu.
 import fs from 'node:fs';
 import path from 'node:path';
 import { prepareFirmware } from '../flasher.js';
+
+// The Lite's: the fpvOS beta3 air image and stock upgrades flashed on real
+// units (README). Not yet: the VRX's AR9311 recovery install and the
+// stock-to-fpvOS bootstrap (not power-loss atomic, no backup), the P1's.
+const PROVEN = new Set(['ascent-air']);
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
@@ -35,12 +44,17 @@ for (const source of args) {
     console.log(`${source}: skipped, ${parsed.errors.join(' ') || 'not a supported image'}`);
     continue;
   }
-  const devices = [parsed.profileId];
-  if (parsed.profileId === 'fpvos-ar9311' && parsed.kind === 0) devices.push('ascent-vrx');
+  const all = [parsed.profileId];
+  if (parsed.profileId === 'fpvos-ar9311' && parsed.kind === 0) all.push('ascent-vrx');
+  const devices = all.filter((d) => PROVEN.has(d));
+  if (!devices.length) {
+    console.log(`${source}: not listed, ${all.join(', ')} installs are not proven on hardware yet`);
+    continue;
+  }
   if (images.some((i) => i.devices.some((d) => devices.includes(d)))) throw new Error(`${source}: a second image for ${devices.join(', ')}`);
   const name = parsed.remoteName ?? path.basename(source);
-  const file = `${release}/${name}`;
-  fs.mkdirSync(path.join(out, release), { recursive: true });
+  const file = `${release}/${parsed.profileId}/${name}`;
+  fs.mkdirSync(path.join(out, release, parsed.profileId), { recursive: true });
   fs.writeFileSync(path.join(out, file), bytes);
   images.push({ devices, file, name, size: bytes.length, md5: image.md5 });
   console.log(`${file}: ${devices.join(', ')}, ${bytes.length} bytes, md5 ${image.md5}`);

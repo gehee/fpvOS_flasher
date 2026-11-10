@@ -152,13 +152,31 @@ async function scenario(name, query, { reselect, file = img, source = img, profi
   return fail;
 }
 
+// A release installed, and the unit back answering as stock: no "runs fpvOS".
+// The test releases are named like none with fpvOS's own updater (which would
+// say its device mode), so no telling either way: no failure claimed.
+async function catalogInstallStillStock() {
+  console.log('--- firmware choice: installed, but the unit comes back on stock');
+  const fail = [];
+  await connectedPage();
+  await until("document.querySelector('#flash').textContent === 'Install fpvOS test-new'", 5000, 'latest release selected');
+  await js("document.querySelector('#flash').click()");
+  await until("document.querySelector('#ask').open", 10000, 'install confirm');
+  await js("document.querySelector('#ask-ok').click()");
+  await until("!document.querySelector('#result').hidden", 120000, 'install finished');
+  const r = await js("({ ok: document.querySelector('#result').dataset.ok, text: document.querySelector('#result').textContent })");
+  console.log(r.text);
+  if (r.ok !== 'true' || /runs fpvOS|not fpvOS/.test(r.text) || !/cannot tell/.test(r.text)) fail.push(`still-stock install result: ${r.text}`);
+  return fail;
+}
+
 // The firmware choice: published releases newest first, an older one installed
 // from the list (downloaded, checked against its MD5, one confirmation), then a
 // local file joins the list.
 async function catalogInstall() {
   console.log('--- firmware choice: an older release, then a local file');
   const fail = [];
-  await connectedPage();
+  await connectedPage('?installsFpvos=test-old');
   await until("document.querySelector('#flash').textContent === 'Install fpvOS test-new'", 5000, 'latest release selected');
   const options = await js("[...document.querySelectorAll('#release option')].map(o => o.textContent).join('|')");
   if (options !== `fpvOS test-new · latest|fpvOS test-old|fpvOS-old-Ascent_H_Sky.img · test|${buildImg} · test`) fail.push(`release list: ${options}`);
@@ -500,6 +518,7 @@ try {
     failures.push(...await rejectedProfile('air-rejects-vrx', '', vrx));
   }
   failures.push(...await catalogInstall());
+  failures.push(...await catalogInstallStillStock());
   failures.push(...await testBuilds());
   failures.push(...await deviceModes());
   failures.push(...await looks());

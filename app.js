@@ -7,7 +7,7 @@ import { WebSerialLink } from './transports/web-serial.js';
 import {
   USB_FILTERS, CONNECT_FILTERS, getProfile, profileForUsb, profileForDevice, preparationForUsb,
 } from './devices/index.js';
-import { prepareFirmware, evaluateSelection, flashFirmware } from './flasher.js';
+import { prepareFirmware, evaluateSelection, flashFirmware, installResult } from './flasher.js';
 import { formatBytes } from './devices/common.js';
 
 const isOurs = (port) => !!profileForUsb(port.getInfo());
@@ -483,10 +483,13 @@ async function flash() {
       progress: setProgress, log, signal: abort.signal,
     });
     const secs = Math.round((Date.now() - t0) / 1000);
-    state.flashed = { ok: true, text: img.catalog
-      ? `Done in ${secs} s: your ${model} runs fpvOS ${img.catalog.release}.${after ? '' : ' It is restarting.'}`
-      : after ? `Flashed in ${secs} s. The device now reports ${after.firmware || after.name}.`
-      : `Flashed in ${secs} s. The device is restarting; reconnect to check it.` };
+    // An fpvOS release: said to run only once the unit, back, says it does.
+    const meta = after ? profileForDevice(after, state.link.port.getInfo())?.meta ?? profile.meta : null;
+    state.flashed = img.catalog
+      ? installResult({ model, release: img.catalog.release, secs, now: after ? meta.describe(after) : null,
+        answers: profile.meta.releaseAnswers })
+      : { ok: true, text: after ? `Flashed in ${secs} s. The device now reports ${after.firmware || after.name}.`
+        : `Flashed in ${secs} s. The device is restarting; reconnect to check it.` };
     if (after) { state.info = after; state.profile = profileForDevice(after, state.link.port.getInfo()); state.unlockOverride = null; }
     log(state.flashed.text);
   } catch (e) {
