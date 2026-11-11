@@ -1,5 +1,5 @@
 // P1 source firmware, independent recovery and browser-only stock preparation.
-import { ASCENT_TRANSPORT, ASCENT_PROTOCOL } from '../transports/ascent.js';
+import { ASCENT_TRANSPORT, ASCENT_PROTOCOL, deviceModeOf } from '../transports/ascent.js';
 import { defineDevice } from './common.js';
 import { FPVOS_PREPARE, FPVOS_TRANSFER, FPVOS_INSTALL, FPVOS_REBOOT_VERIFY } from '../stages/fpvos.js';
 import { parseFpvosBundle, bundleForBoard } from './fpvos-bundle.js';
@@ -14,13 +14,25 @@ export const parseP1Bundle = (bytes) => parseFpvosBundle(bytes, {
 export const matchesFpvosP1Air = (info) => info.name === 'fpvOS updater'
   && info.hardware === 'P1_SKY' && info.serial === 'fpvos-p1-air' && info.status === 0;
 
+// The updater's SDK field: the image's fpvOS version (git describe), from the
+// updater with board/p1-air/source-post-build.sh on; "development" before.
+const p1Version = (info) => (info.sdk && info.sdk !== 'development' ? `fpvOS ${info.sdk}` : 'fpvOS');
+
 export const FPVOS_P1_AIR = defineDevice({
   meta: {
     id: 'fpvos-p1-air', name: 'BETAFPV P1 Air · fpvOS',
     models: ['BETAFPV P1 Air · Stock', 'BETAFPV P1 Air · fpvOS'],
-    usb: [{ usbVendorId: 0x1d6b, usbProductId: 0x0104 }],
+    // fpvOS's serial port, and in bridge mode (fpvOS_usb) the AR8030's boot ROM,
+    // then the running chip, the serial port kept with the updater on it
+    usb: [{ usbVendorId: 0x1d6b, usbProductId: 0x0104 }, { usbVendorId: 0x4152, usbProductId: 0x8030 },
+      { usbVendorId: 0x1d6b, usbProductId: 0x8030 }],
     deviceVersion: () => null,
-    describe: () => ({ model: 'BETAFPV P1 Air', fpvos: true, firmware: 'fpvOS' }),
+    describe: (info) => ({ model: 'BETAFPV P1 Air', fpvos: true, firmware: p1Version(info) }),
+    // normal and bridge mode where the updater names its mode; bridge mode is
+    // not saved on the P1 (no SAVED_MODE in fpvOS_usb's p1-air board): a restart
+    // brings it back in normal mode
+    deviceModes: (info) => deviceModeOf(info) !== null,
+    bridgeKept: false,
     preparation: Object.freeze({ enterBootloader: enterP1Bootloader, loadRecovery: prepareP1Recovery,
       serialFilter: P1_STOCK_USB, hidFilter: P1_HID_FILTER }),
     identity: { matches: matchesFpvosP1Air, normalMatches: (a, b) => matchesFpvosP1Air(a) && matchesFpvosP1Air(b) },
@@ -30,7 +42,7 @@ export const FPVOS_P1_AIR = defineDevice({
     notices: { flash: 'Keep external power connected throughout the update. Requires the P1 fpvOS updater or clean recovery; prepare stock 1.0.44 using the browser controls in the Device panel first. The device checks the supported P1_SKY 1.0.44 NAND layout and preserves stock bank 1, factory calibration and user settings. Unsigned development firmware; keep a verified backup and recovery access.' },
   },
   transport: Object.freeze({ ...ASCENT_TRANSPORT, strictReplies: true,
-    protocol: Object.freeze({ createSession: ASCENT_PROTOCOL.createSession }),
+    protocol: Object.freeze({ createSession: ASCENT_PROTOCOL.createSession, deviceMode: ASCENT_PROTOCOL.deviceMode }),
     timeouts: Object.freeze({ ...ASCENT_TRANSPORT.timeouts, connect: 30000, install: 15 * 60000 }) }),
   stages: { preflash: [FPVOS_PREPARE], flash: [FPVOS_TRANSFER, FPVOS_INSTALL], postflash: [FPVOS_REBOOT_VERIFY] },
 });

@@ -18,7 +18,9 @@
   const name = type === 'air' ? 'Ascent_H_Sky' : type === 'vrx' ? 'Ascent_VRX' : 'Ascent_VRX_Pro';
   const factory = { name, serial: 'FAKE0001', hardware: type === 'air' ? 'FPV-Ascent-Sky-482-V1.3-1.0'
     : type === 'vrx' ? 'FPV-Ascent-Gnd-485-V1.2-1.0' : 'HW_V1.0' };
-  let firmware = `${type === 'air' ? 'Ascent_H_Sky' : 'Ascent_G_Gnd'}_${params.get('fw') ?? (type === 'air' ? '18_21_10' : '17_5_3')}`;
+  // ?installed=SHA256: an fpvOS updater that reports the bundle it installed
+  let firmware = params.get('installed')
+    ?? `${type === 'air' ? 'Ascent_H_Sky' : 'Ascent_G_Gnd'}_${params.get('fw') ?? (type === 'air' ? '18_21_10' : '17_5_3')}`;
   const staged = new Map();
   const fake = window.__fake = Object.assign({ regrant: true, bootMs: 600, log: [] }, window.__fake || {});
   fake.starts = []; fake.rebootPayloads = [];
@@ -38,6 +40,8 @@
 
     getInfo() {
       if (this.dev.stockP1) return { usbVendorId: 0x1d6b, usbProductId: 0x0101 };
+      // an fpvOS P1 in bridge mode: the running AR8030's ids, the serial port kept
+      if (this.dev.custom && type === 'p1' && this.dev.mode === 'bridge') return { usbVendorId: 0x1d6b, usbProductId: 0x8030 };
       return this.dev.custom ? { usbVendorId: 0x1d6b, usbProductId: 0x0104 } : { usbVendorId: VID, usbProductId: 0x0101 };
     }
 
@@ -106,9 +110,11 @@
       if (f.cmd === C.FIND_DEVICE) {
         if (Date.now() < readyAt) return;
         if (this.custom) return this.send(f, this.struct(300, (i32, str) => {
-          i32(0, 1 << 20); str(4, 'development'); str(36, 'fpvOS updater');
+          // ?p1Version=V&p1Temp=C: a P1 updater that reports its image's version and SoC temperature
+          i32(0, 1 << 20); str(4, type === 'p1' && params.get('p1Version') || 'development'); str(36, 'fpvOS updater');
+          if (type === 'p1' && params.get('p1Temp')) i32(100, Number(params.get('p1Temp')));
           str(104, /^[a-f0-9]{64}$/.test(firmware) ? firmware : 'fpvOS unsigned development updates');
-          str(168, type === 'p1' ? 'fpvos-p1-air' : 'fpvos-ar9311'); str(200, type === 'p1' ? 'P1_SKY' : 'Gnd485'); str(236, this.mode === 'clean' ? 'clean RAM mode' : 'normal mode');
+          str(168, type === 'p1' ? 'fpvos-p1-air' : 'fpvos-ar9311'); str(200, type === 'p1' ? 'P1_SKY' : 'Gnd485'); str(236, { clean: 'clean RAM mode', bridge: 'bridge mode' }[this.mode] ?? 'normal mode');
         }));
         const current = this.mode === 'unlocked' && !params.has('unlockFails') ? 'Ascent_G_Gnd_0_0_0' : firmware;
         // ?airFpvos=VERSION: an air unit on fpvOS's updater (its version in the
@@ -128,7 +134,8 @@
         const request = new TextDecoder().decode(f.payload).replace(/\0.*$/s, '');
         // fpvOS's updater on an air unit: its device modes (fpvOS_usb), each a new
         // USB device; ?refuseMode=1 refuses them
-        if (type === 'air' && params.get('airFpvos') && ['bridge', 'normal', 'reboot'].includes(request)) {
+        if (type === 'air' && params.get('airFpvos') && ['bridge', 'normal', 'reboot'].includes(request)
+          || type === 'p1' && ['bridge', 'normal'].includes(request)) {
           const refused = params.has('refuseMode') || request === 'bridge' && this.mode !== 'normal';
           this.send(f, this.struct(68, (i32, str) => { i32(0, refused ? -1 : 0); str(4, refused ? 'bridge mode unsupported or failed to start' : 'OK'); }));
           fake.rebootPayloads.push(request);

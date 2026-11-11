@@ -545,20 +545,29 @@ async function networkMode() {
 }
 
 // What each mode is, under the switch, and what to expect after switching.
+// Bridge mode is kept across power cycles where the unit saves it (the Lite's,
+// fpvOS_usb SAVED_MODE); a unit without (the P1, meta.bridgeKept false) starts
+// in normal mode again.
+const bridgeKept = () => state.profile?.meta.bridgeKept !== false;
 const DEVICE_MODE_ABOUT = Object.freeze({
-  normal: 'Normal: the unit flies with its own radio.',
-  bridge: 'Bridge: its AR8030 radio chip is on USB, for a computer to use as its own. '
-    + 'It stays in bridge mode, also after a power cycle, until you switch it back here.',
+  normal: () => 'Normal: the unit flies with its own radio.',
+  bridge: () => 'Bridge: its AR8030 radio chip is on USB, for a computer to use as its own. ' + (bridgeKept()
+    ? 'It stays in bridge mode, also after a power cycle, until you switch it back here.'
+    : 'It stays in bridge mode until you switch it back here or it restarts: it starts in normal mode.'),
 });
 const DEVICE_MODE_ASK = Object.freeze({
-  normal: 'The unit stops being a USB radio and flies with its own radio again.',
-  bridge: 'The unit stops its own radio and video, and its AR8030 shows up on USB for the device it is '
-    + 'plugged into. It stays that way, also after a power cycle, until you switch it back to normal here.',
+  normal: () => 'The unit stops being a USB radio and flies with its own radio again.',
+  bridge: () => 'The unit stops its own radio and video, and its AR8030 shows up on USB for the device it is '
+    + `plugged into. It stays that way${bridgeKept() ? ', also after a power cycle,' : ''} until you switch it back to normal here`
+    + (bridgeKept() ? '.' : ' or it restarts.'),
 });
 // back in normal mode the page shows the unit again by itself: nothing to say
 const DEVICE_MODE_DONE = Object.freeze({
-  normal: null,
-  bridge: 'The unit is in bridge mode: plug it into the device that uses its radio. To switch it back, connect it here again.',
+  normal: () => null,
+  bridge: () => (bridgeKept()
+    ? 'The unit is in bridge mode: plug it into the device that uses its radio. To switch it back, connect it here again.'
+    : 'The unit is in bridge mode until it restarts: keep it powered if you move its USB cable to the device that '
+      + 'uses its radio. To switch it back, connect it here again, or power it off and on.'),
 });
 
 async function switchDeviceMode(to) {
@@ -566,7 +575,7 @@ async function switchDeviceMode(to) {
   const session = state.session;
   if (!session || !name || state.busy || !state.profile?.transport.protocol.deviceMode) return;
   const restart = from === 'update';
-  if (!restart && !await ask(`Switch to ${to} mode?`, DEVICE_MODE_ASK[to], 'Switch')) return;
+  if (!restart && !await ask(`Switch to ${to} mode?`, DEVICE_MODE_ASK[to](), 'Switch')) return;
   if (state.session !== session || state.busy) return;
   try {
     const r = await state.profile.transport.protocol.deviceMode(session, name);
@@ -587,7 +596,7 @@ async function switchDeviceMode(to) {
     log(`the unit went away while switching to ${to} mode`, 'warn');
   }
   // The unit re-enumerates (bridge mode under other USB IDs): this port is done.
-  state.notice = restart ? 'The unit is restarting normally. Connect it again in a few seconds.' : DEVICE_MODE_DONE[to];
+  state.notice = restart ? 'The unit is restarting normally. Connect it again in a few seconds.' : DEVICE_MODE_DONE[to]();
   state.expectMode = to;
   await state.link?.close().catch(() => {});
   render();
@@ -640,7 +649,7 @@ function render() {
     $(`mode-${to}`).setAttribute('aria-checked', String(deviceMode === to));
     $(`mode-${to}`).disabled = state.busy || state.connecting || !deviceModeRequest(deviceMode, to) && deviceMode !== to;
   }
-  $('device-mode-note').textContent = DEVICE_MODE_ABOUT[deviceMode] ?? '';
+  $('device-mode-note').textContent = DEVICE_MODE_ABOUT[deviceMode]?.() ?? '';
   $('update-mode').hidden = deviceMode !== 'update';
   $('mode-restart').disabled = state.busy || state.connecting;
   $('firmware').hidden = deviceMode === 'bridge';
@@ -704,12 +713,14 @@ function render() {
       ['Profile', state.profile?.meta.name ?? 'unsupported'],
       // an fpvOS unit reports a stock firmware name for the vendor's tools
       ['Firmware', about?.fpvos ? about.firmware : info.firmware],
-      ['Reported as', about?.fpvos ? info.firmware : ''],
+      // fpvOS's own updater (VRX, P1) reports the bundle it installed
+      [/^[0-9a-f]{64}$/.test(info.firmware) ? 'Installed bundle' : 'Reported as', about?.fpvos ? info.firmware : ''],
       ['Device', info.name],
       ['Hardware', info.hardware],
       ['Serial', info.serial],
       ['SDK', about?.fpvos ? '' : info.sdk],
-      ['CPU temperature', info.cpuTemp != null ? `${info.cpuTemp} °C` : ''],
+      // 0: an updater that does not measure it
+      ['CPU temperature', info.cpuTemp ? `${info.cpuTemp} °C` : ''],
       ['Max chunk', info.maxChunk ? formatBytes(info.maxChunk) : ''],
     ].filter(([, v]) => v);
     $('unit-info').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', k), el('dd', v)]));

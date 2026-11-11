@@ -263,6 +263,41 @@ async function testBuilds() {
   return fail;
 }
 
+// An fpvOS P1: the version and SoC temperature its updater reports, the bundle
+// it installed, and its device modes (bridge mode not kept across a restart).
+async function p1OnFpvos() {
+  console.log('--- P1 on fpvOS: version, installed bundle, temperature, device modes');
+  const fail = [];
+  const rows = "Object.fromEntries([...document.querySelectorAll('#unit-info dt')].map(d => [d.textContent, d.nextElementSibling.textContent]))";
+  // an updater from before: no version, no temperature
+  await connectedPage('?device=p1');
+  let info = await js(rows);
+  if (info.Firmware !== 'fpvOS' || 'CPU temperature' in info) fail.push(`older P1 updater rows: ${JSON.stringify(info)}`);
+  const hash = 'ab'.repeat(32);
+  await connectedPage(`?device=p1&p1Version=2026.10.beta4-23-g1234567&p1Temp=53&installed=${hash}`);
+  info = await js(rows);
+  if (info.Firmware !== 'fpvOS 2026.10.beta4-23-g1234567' || info['Installed bundle'] !== hash
+    || info['CPU temperature'] !== '53 °C' || 'Reported as' in info) fail.push(`P1 rows: ${JSON.stringify(info)}`);
+  if (!await js("!document.querySelector('#advanced').hidden")) fail.push('no device mode switch for the P1');
+  await js("document.querySelector('#advanced').open = true");
+  if (!await js("document.querySelector('#mode-normal').getAttribute('aria-checked') === 'true'")) fail.push('P1 normal mode not shown');
+  await js("document.querySelector('#mode-bridge').click()");
+  await until("document.querySelector('#ask').open", 3000, 'P1 bridge confirm');
+  if (await js("/after a power cycle/.test(document.querySelector('#ask-text').textContent)")) fail.push('P1 bridge confirm says it is kept');
+  await js("document.querySelector('#ask-ok').click()");
+  await until("!document.querySelector('#start').hidden && /until it restarts/.test(document.querySelector('#start-note').textContent)", 5000, 'P1 bridge done');
+  // back under the running AR8030's USB ids, the page connects to it again
+  await until("!document.querySelector('#device').hidden && document.querySelector('#mode-bridge').getAttribute('aria-checked') === 'true'", 10000, 'P1 in bridge mode');
+  if (!await js("/until you switch it back here or it restarts/.test(document.querySelector('#device-mode-note').textContent)")) fail.push('P1 bridge note');
+  await shot('p1-bridge');
+  await js("document.querySelector('#mode-normal').click()");
+  await until("document.querySelector('#ask').open", 3000, 'P1 normal confirm');
+  await js("document.querySelector('#ask-ok').click()");
+  await until("!document.querySelector('#device').hidden && document.querySelector('#mode-normal').getAttribute('aria-checked') === 'true'", 10000, 'P1 back in normal mode');
+  if (String(await js('window.__fake.rebootPayloads')) !== 'bridge,normal') fail.push(`P1 mode requests: ${await js('window.__fake.rebootPayloads')}`);
+  return fail;
+}
+
 // fpvOS's device modes on an air unit: normal -> bridge -> normal through the
 // switch (the unit re-enumerates each time), a unit found in update mode, a
 // refused switch, and none of it on stock's updater.
@@ -527,6 +562,7 @@ try {
   failures.push(...await catalogInstallStillStock());
   failures.push(...await testBuilds());
   failures.push(...await deviceModes());
+  failures.push(...await p1OnFpvos());
   failures.push(...await looks());
 } catch (e) {
   failures.push(e.message);
