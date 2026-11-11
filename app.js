@@ -141,9 +141,10 @@ async function openPort(port) {
   // checked again against whatever is connected now
   if (state.image?.catalog) { state.image = null; state.flashed = null; }
   if (!releasesFor(state.profile).some((e) => e.release === state.pick) && state.pick !== 'file'
-    && !testsFor(state.profile).some((t) => `test:${t.path}` === state.pick)) state.pick = '';
+    && !state.tests.some((t) => `test:${t.path}` === state.pick)) state.pick = '';
   render();
   if (state.profile && state.image?.file) loadFile(state.image.file);
+  loadTests();
 }
 
 // closed is a new promise after every reopen, and a flash reopens on its own
@@ -331,8 +332,10 @@ async function download(url, name, size, onProgress) {
 
 // Images just built, before any release: on the build computer, test-firmware/
 // next to index.html (a folder, or a link to the build output) served with a
-// directory listing (python3 -m http.server). Its files and those of the folders
-// in it are offered as test builds. The published site has no such folder.
+// directory listing (python3 -m http.server). Every firmware file in it and in
+// the folders in it is offered as a test build, whichever unit is connected:
+// picking one shows its checks, which say whether this unit can take it. The
+// published site has no such folder.
 const TEST_DIR = new URL('test-firmware/', location.href);
 const TEST_FILE = /\.(img|fwu|zip|xz|gz|tgz|tar)$/i;
 
@@ -346,32 +349,38 @@ async function listDir(dir) {
   return [...new Map(urls.map((u) => [u.href, u])).values()];
 }
 
-async function loadTests() {
+// Read when the page opens and again on Connect, when the firmware list opens
+// and when the page comes back to the front, so a build copied in after the page
+// was opened shows up without a reload. One read at a time.
+let testScan = null;
+function loadTests() {
+  if (state.busy) return Promise.resolve();
+  testScan ??= scanTests().finally(() => { testScan = null; });
+  return testScan;
+}
+
+async function scanTests() {
   const found = [];
+  let top = null;
   try {
-    const top = await listDir(TEST_DIR);
-    state.testDir = !!top;
+    top = await listDir(TEST_DIR);
     for (const u of top ?? []) {
       found.push(...((u.pathname.endsWith('/') ? await listDir(u) : [u]) ?? []).filter((f) => !f.pathname.endsWith('/')));
     }
   } catch { /* none */ }
-  // the VRX Pro installs from an SD card, not from this page
-  state.tests = found.map((url) => ({ url, path: decodeURIComponent(url.href.slice(TEST_DIR.href.length)) }))
-    .filter((t) => TEST_FILE.test(t.path) && !/vrxpro/i.test(t.path))
+  const tests = found.map((url) => ({ url, path: decodeURIComponent(url.href.slice(TEST_DIR.href.length)) }))
+    .filter((t) => TEST_FILE.test(t.path))
     .sort((a, b) => (a.path < b.path ? 1 : -1));
-  if (state.tests.length) log(`test builds in ${TEST_DIR.pathname}: ${state.tests.map((t) => t.path).join(', ')}`);
-  render();
+  const names = (list) => list.map((t) => t.path).join(', ');
+  const listed = names(tests) !== names(state.tests);
+  const changed = listed || state.testDir !== !!top;
+  state.testDir = !!top;
+  state.tests = tests;
+  if (listed && tests.length) log(`test builds in ${TEST_DIR.pathname}: ${names(tests)}`);
+  // a test build picked before it was taken away
+  if (state.pick.startsWith('test:') && !tests.some((t) => `test:${t.path}` === state.pick)) state.pick = '';
+  if (changed) render();
 }
-
-// The test builds a unit can take, by name: its own image (fpvOS-<version>-
-// Ascent_H_Sky_18_21_10.img), an fpvOS bundle for a bundle profile or a stock VRX
-// (which the RAM updater takes to fpvOS), or an archive (the page picks inside).
-const testsFor = (profile) => (profile ? state.tests : []).filter(({ path }) => {
-  const name = path.split('/').pop().toLowerCase(), prefix = profile.meta.image.prefix?.toLowerCase();
-  if (name.endsWith('.fwu')) return !prefix || profile.meta.id === 'ascent-vrx';
-  if (name.endsWith('.img')) return !!prefix && name.includes(prefix);
-  return true;
-});
 
 // Fetched again on every pick, so a rebuilt image under the same name is the new one.
 async function loadTest(path) {
@@ -645,7 +654,7 @@ function render() {
   if (!state.pick && state.localFile) state.pick = 'file';
   const options = [...releases.map((e, i) => [e.release, `fpvOS ${e.release}${i ? '' : ' · latest'}`]),
     // a test build's folder (one per build) is a line under its name in the list
-    ...testsFor(state.profile).map((t) => [`test:${t.path}`, `${t.path.split('/').pop()} · test`,
+    ...state.tests.map((t) => [`test:${t.path}`, `${t.path.split('/').pop()} · test`,
       t.path.includes('/') ? t.path.slice(0, t.path.lastIndexOf('/')) : '']),
     ...(state.localFile ? [['file', `Local file: ${state.localFile.name}`]] : [])];
   // only test builds: none is fetched before it is chosen
@@ -767,8 +776,8 @@ function render() {
     : state.busy || state.connecting ? ''
     : installed ? 'Done. You can unplug the device.'
     : !state.pick ? (state.catalog === undefined ? 'Looking for fpvOS releases…'
-      : testsFor(state.profile).length ? 'Choose a test build, or a local file.'
-      : state.testDir ? 'No fpvOS release and no test build in test-firmware/ for this device. Choose a local file.'
+      : state.tests.length ? 'Choose a test build, or a local file.'
+      : state.testDir ? 'No fpvOS release for this device, and no test build in test-firmware/. Choose a local file.'
       : 'This page has no fpvOS release for this device yet. Choose a local file.')
     : pickedIsFile() ? (!current ? 'Choose a firmware image.' : img.loading ? 'Unpacking the firmware.'
       : errors ? 'Fix the problems above first.' : '')
@@ -806,6 +815,7 @@ function renderPicker() {
 let pickerActive = -1;
 function openPicker() {
   if ($('release-button').disabled) return;
+  loadTests();
   const items = [...$('release-list').children];
   $('release-list').hidden = false;
   $('release-button').setAttribute('aria-expanded', 'true');
@@ -850,6 +860,9 @@ function init() {
   render();
   loadCatalog();
   loadTests();
+  // a build copied into test-firmware/ while the page was open
+  window.addEventListener('focus', () => loadTests());
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadTests(); });
   if (!('serial' in navigator)) return;
 
   $('connect').onclick = connect;

@@ -145,10 +145,13 @@ its address in `chrome://flags`.
 Served from the computer that builds fpvOS, the page also offers the images in
 `test-firmware/` next to `index.html`: its files and those of the folders in
 it, listed through the server's directory listing, show up in the firmware
-list as **test build** (only those the connected unit can take: its own
-`.img`, `.fwu` bundles, archives; VRX Pro images are left out). Picking one
-fetches it and shows every check of a local file, then **Flash this file**.
-`test-firmware` is ignored by git, so the published site never has one.
+list as **test build**: every `.img`, `.fwu`, `.zip`, `.xz`, `.gz`, `.tgz` and
+`.tar` there, whichever unit is connected, tested on hardware or not. Picking
+one fetches it and shows every check of a local file (they say whether the
+connected unit can take it), then **Flash this file**. The folder is read again
+on **Connect**, when the firmware list opens and when the page comes back to
+the front, so a build copied in while the page is open shows up without a
+reload. `test-firmware` is ignored by git, so the published site never has one.
 
 ```bash
 mkdir -p test-firmware   # or a link to the build output

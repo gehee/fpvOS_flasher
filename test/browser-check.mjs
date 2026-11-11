@@ -179,7 +179,7 @@ async function catalogInstall() {
   await connectedPage('?installsFpvos=test-old');
   await until("document.querySelector('#flash').textContent === 'Install fpvOS test-new'", 5000, 'latest release selected');
   const options = await js("[...document.querySelectorAll('#release option')].map(o => o.textContent).join('|')");
-  if (options !== `fpvOS test-new · latest|fpvOS test-old|fpvOS-old-Ascent_H_Sky.img · test|${buildImg} · test`) fail.push(`release list: ${options}`);
+  if (options !== `fpvOS test-new · latest|fpvOS test-old|fpvOS-vrxpro-abc1234.img.xz · test|fpvOS-old-Ascent_H_Sky.img · test|${buildImg} · test`) fail.push(`release list: ${options}`);
   if (!await js("document.querySelector('#device-name').textContent === 'Caddx Ascent Lite'")) fail.push('device name');
   if (!await js("document.querySelector('#start').hidden && document.querySelector('#developer').hidden && document.querySelector('#image-details').hidden")) fail.push('connect panel, developer section or image details shown');
   await shot('install-ready');
@@ -211,11 +211,10 @@ async function catalogInstall() {
   if (!await js(`[...document.querySelectorAll('#release option')].pop().textContent === ${JSON.stringify(`Local file: ${path.basename(img)}`)}`)) fail.push('local file not in the list');
   if (await js("document.querySelector('#image-details').hidden")) fail.push('local file details hidden');
   await shot('install-local-file');
-  // a VRX has no published image here: nothing to install until a file is chosen
+  // a VRX has no published image here: nothing to install until a test build or a file is chosen
   await connectedPage('?device=vrx');
-  await until("/no fpvOS release/i.test(document.querySelector('#hint').textContent)", 5000, 'no-release hint');
-  if (!await js("/test-firmware/.test(document.querySelector('#hint').textContent)")) fail.push('no-release hint does not mention test-firmware/');
-  if (!await js("document.querySelector('#flash').disabled && document.querySelector('#release').disabled")) fail.push('install offered without an image');
+  await until("/choose a test build/i.test(document.querySelector('#hint').textContent)", 5000, 'no-release hint');
+  if (!await js("document.querySelector('#flash').disabled")) fail.push('install offered without an image');
   // a unit on fpvOS shows fpvOS's version, not the stock name it reports for the PC tool
   await connectedPage('?airFpvos=2026.10.beta4-42-g3a8bff1');
   if (!await js("document.querySelector('#device-firmware').textContent === 'Runs fpvOS 2026.10.beta4-42-g3a8bff1'")) fail.push(`fpvOS version: ${await js("document.querySelector('#device-firmware').textContent")}`);
@@ -252,9 +251,15 @@ async function testBuilds() {
   const r = await js("({ ok: document.querySelector('#result').dataset.ok, text: document.querySelector('#result').textContent, remotePath: window.__fake.remotePath })");
   if (r.ok !== 'true') fail.push(`test build flash: ${r.text}`);
   if (r.remotePath !== '/tmp/pc/Ascent_H_Sky_18_21_10.img') fail.push(`wrong remote filename: ${r.remotePath}`);
-  // an air image is no test build for a VRX
+  // every test build is listed whatever is connected (its checks say whether the unit takes it)
   await connectedPage('?device=vrx');
-  if (await js("[...document.querySelectorAll('#release option')].some(o => o.value.startsWith('test:'))")) fail.push('air test build offered to a VRX');
+  const listed = await js("[...document.querySelectorAll('#release option')].filter(o => o.value.startsWith('test:')).length");
+  if (listed !== 3) fail.push(`a VRX lists ${listed} of the 3 test builds`);
+  // a build copied in while the page is open shows when the page comes back to the front
+  listing('test-root.html', [...testRoot, 'fpvOS-new-Ascent_H_Sky.img']);
+  await js("window.dispatchEvent(new Event('focus'))");
+  await until(`document.querySelector('#release option[value="test:fpvOS-new-Ascent_H_Sky.img"]')`, 5000, 'new test build listed');
+  listing('test-root.html', testRoot);
   return fail;
 }
 
@@ -466,9 +471,10 @@ const listing = (name, links) => {
   return path.join(out, name);
 };
 const build = '2026-11-06-fpvOS-abc1234', buildImg = 'fpvOS-abc1234-Ascent_H_Sky_18_21_10.img';
+const testRoot = [`${build}/`, 'fpvOS-vrxpro-abc1234.img.xz', 'fpvOS-old-Ascent_H_Sky.img', '?C=N;O=D'];
 const harness = await openBrowser({ root, out, extra: { 'firmware/catalog.json': catalog,
   'firmware/test-new/air.img': img, 'firmware/test-old/air.img': img,
-  'test-firmware/': listing('test-root.html', [`${build}/`, 'fpvOS-vrxpro-abc1234.img.xz', 'fpvOS-old-Ascent_H_Sky.img', '?C=N;O=D']),
+  'test-firmware/': listing('test-root.html', testRoot), 'test-firmware/fpvOS-new-Ascent_H_Sky.img': img,
   [`test-firmware/${build}/`]: listing('test-build.html', [buildImg, 'notes.txt', '../']),
   [`test-firmware/${build}/${buildImg}`]: img, 'test-firmware/fpvOS-old-Ascent_H_Sky.img': img } });
 const { cdp, evaluate: js, until, screenshot: shot, chooseFile, problems } = harness;
