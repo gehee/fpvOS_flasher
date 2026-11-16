@@ -154,6 +154,10 @@ function fakeSession(image, opts = {}) {
       if (cmd === CMD.FILE_END && opts.lostEnd) throw new TimeoutError();
       const p = Buffer.alloc(cmd === CMD.FILE_END || cmd === CMD.FILE_DATA ? 80 : cmd === CMD.UPGRADE_STATUS ? 72 : 68);
       if (cmd === CMD.REBOOT) p.write('OK', 4);
+      if (cmd === CMD.SET_LOCATION) {
+        session.location = payload;
+        if (opts.noLocation) { p.writeInt32LE(-1, 0); p.write('location not kept on this unit', 4); }
+      }
       if (cmd === CMD.FILE_DATA || cmd === CMD.FILE_END) {
         received += payload?.length ?? 0;
         p.writeUInt32LE(payload?.length ?? 0, 0); p.writeUInt32LE(received + (opts.badCount ? 1 : 0), 4); p.writeUInt32LE(image.bytes.length, 8);
@@ -232,4 +236,27 @@ test('original-stock restoration verifies stock boot; a missing postboot device 
       await assert.rejects(FPVOS_REBOOT_VERIFY(ctx)); assert.notEqual(runtime.postflashVerified, true);
     }
   }
+});
+
+test('after a flash the goggle gets this computer\'s time zone, once it runs fpvOS; never a failed flash', async () => {
+  const image = await prepareFirmware(new File([bundle()], 'fpvos.fwu'));
+  const where = { tz: 'CET-1CEST,M3.5.0,M10.5.0/3', zone: 'Europe/Paris', country: 'FR' };
+  const td = new TextDecoder(), text = (p, a, b) => td.decode(p.subarray(a, b)).replace(/\0+$/, '');
+  {
+    const logs = [], session = fakeSession(image);
+    await flashFirmware(session, FPVOS_AR9311, image, { info, location: where, log: (m, l = 'info') => logs.push(`${l} ${m}`) });
+    assert.equal(session.calls.at(-1), CMD.SET_LOCATION);
+    assert.deepEqual([text(session.location, 0, 64), text(session.location, 64, 128), text(session.location, 128)], [where.tz, where.zone, where.country]);
+    assert.ok(logs.some((l) => /time zone Europe\/Paris/.test(l)), logs.join('\n'));
+  }
+  const logs = [], older = fakeSession(image, { noLocation: true });
+  assert.equal((await flashFirmware(older, FPVOS_AR9311, image, { info, location: where, log: (m, l = 'info') => logs.push(`${l} ${m}`) })).firmware, image.parsed.sha256);
+  assert.ok(logs.some((l) => /^warn the goggle did not take .*location not kept/.test(l)), logs.join('\n'));
+  const off = fakeSession(image);
+  await flashFirmware(off, FPVOS_AR9311, image, { info, location: false });
+  assert.ok(!off.calls.includes(CMD.SET_LOCATION));
+});
+
+test('air units are not given a location', () => {
+  for (const id of ['ascent-air', 'fpvos-p1-air']) assert.ok(!getProfile(id).stages.postflash.some((s) => s.name === 'SEND_LOCATION'), id);
 });

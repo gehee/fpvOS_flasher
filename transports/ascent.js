@@ -26,6 +26,7 @@ export const CMD = Object.freeze({
   FILE_DATA: 116,
   FILE_END: 117,
   UPGRADE_STATUS: 118,
+  SET_LOCATION: 200,     // fpvOS goggles: the host's time zone and country (location.js)
 });
 
 const CMD_NAME = Object.fromEntries(Object.entries(CMD).map(([k, v]) => [v, k]));

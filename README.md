@@ -203,6 +203,13 @@ CRC-32, CRC-64 or SHA-256 check. Archive integrity checks are verified.
   and the requested firmware are verified afterward. The page offers port
   reselection if permission is lost across a reboot.
 
+- Location: once an fpvOS goggle (the Ascent VRX) runs its new firmware,
+  the page gives it this computer's time zone (as a POSIX TZ string, from
+  tzdata 2026e in `zones.js`; `tools/make-zones.py` updates it), the zone's name
+  and its country. The goggle takes the zone only when SYSTEM > Time Zone is
+  NOT SET. It goes only to the goggle, never fails a flash, and air units are
+  not given one.
+
 **FILE_END starts installation.** Cancellation stops the transfer before that
 command; afterward the page continues monitoring and post-reboot verification.
 Negative updater status codes fail immediately.

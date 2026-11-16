@@ -8,6 +8,7 @@
 import { ASCENT_TRANSPORT, ASCENT_PROTOCOL } from '../transports/ascent.js';
 import { defineDevice } from './common.js';
 import { FPVOS_PREPARE, FPVOS_TRANSFER, FPVOS_INSTALL, FPVOS_REBOOT_VERIFY } from '../stages/fpvos.js';
+import { SEND_LOCATION } from '../stages/location.js';
 
 import { parseFpvosBundle as parseBundle, bundleForBoard } from './fpvos-bundle.js';
 export { isFpvosBundle } from './fpvos-bundle.js';
@@ -36,5 +37,5 @@ export const FPVOS_AR9311 = defineDevice({
   transport: Object.freeze({ ...ASCENT_TRANSPORT, strictReplies: true,
     protocol: Object.freeze({ createSession: ASCENT_PROTOCOL.createSession }),
     timeouts: Object.freeze({ ...ASCENT_TRANSPORT.timeouts, connect: 30000, install: 15 * 60000 }) }),
-  stages: { preflash: [FPVOS_PREPARE], flash: [FPVOS_TRANSFER, FPVOS_INSTALL], postflash: [FPVOS_REBOOT_VERIFY] },
+  stages: { preflash: [FPVOS_PREPARE], flash: [FPVOS_TRANSFER, FPVOS_INSTALL], postflash: [FPVOS_REBOOT_VERIFY, SEND_LOCATION] },
 });
