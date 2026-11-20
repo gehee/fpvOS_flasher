@@ -1,0 +1,55 @@
+{
+  "format": 1,
+  "version": "browser-v1",
+  "board": "skyzone-steadydigital",
+  "board_id": 21316,
+  "source": "https://github.com/gehee/fpvOS",
+  "source_commit": "4fabe2faf1c4c4498501246faa6686f5473786e8",
+  "build_config": "skyzonesteadydigital_flash_defconfig",
+  "supported_stock_firmware": [
+    "ZBBM5DZFMP-uboot-2020.10-20260402"
+  ],
+  "files": {
+    "kernel.img": {
+      "size": 5744384,
+      "sha256": "7df2b9147930558ac092ae7ab8aaa41669b2f8f60d3f6f76eb122ad5b9c51117",
+      "address": 608174080
+    },
+    "skyzone-steadydigital.dtb": {
+      "size": 12056,
+      "sha256": "5f14a74844890ad7dbe2f0769cc8ed1d41c0f5f751623e07f76729dd945ef05b",
+      "address": 570949632
+    },
+    "recovery-initrd.img": {
+      "size": 1332,
+      "sha256": "70d994a5c110d6be877007f4a371f8c01a6c5bd0a252767c3cfbc37c3d2f1858",
+      "address": 637534208
+    }
+  },
+  "bootloaders": {
+    "v2": {
+      "fingerprints": [
+        {
+          "address": 803757016,
+          "size": 64,
+          "sha256": "3f059998c3d1b2f6088ef74287b05398519601401bacc14515d73c91c856eaee"
+        },
+        {
+          "address": 803757472,
+          "size": 64,
+          "sha256": "fb5c0b1747f7e78003f92bba2591dd13b1437cf81a4d2c0b68f52d7fbd394065"
+        },
+        {
+          "address": 803623384,
+          "size": 64,
+          "sha256": "d5e7caa635ba5af4b785d0e665f8ddeccadd6c2f7e3afaa483725954a328992e"
+        },
+        {
+          "address": 803753888,
+          "size": 64,
+          "sha256": "fa1863401a64e73cb609ac67db1e64163a8998c6d83c7672557afcec67709910"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SteadyDigital browser-prepare (test)</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 16px; color: #111; background:#fff; }
+  h1 { font-size: 20px; } h2 { font-size: 15px; margin: 18px 0 6px; }
+  button { font: inherit; padding: 8px 14px; margin: 4px 0; border-radius: 8px; border: 1px solid #888; background:#f4f4f4; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #log { white-space: pre-wrap; background:#0b0b0b; color:#d6d6d6; padding:12px; border-radius:8px; height: 320px; overflow:auto; font: 12px/1.45 ui-monospace, monospace; }
+  .ok { color:#39d353; } .err { color:#ff6b6b; } .warn { color:#e3b341; }
+  .step { border:1px solid #ddd; border-radius:10px; padding:10px 14px; margin:10px 0; }
+  code { background:#eee; padding:1px 4px; border-radius:4px; }
+</style>
+</head>
+<body>
+<h1>SteadyDigital browser-prepare — hardware test</h1>
+<p>Reuses the shipping <code>P1HidRecovery</code> engine with the SteadyDigital <code>v2</code> layout and
+assets. It takes a <strong>stock</strong> SteadyDigital into fpvOS USB clean recovery over WebHID. It writes
+only bootloader RAM; the bank-B install is a separate, already-proven step. Keep external power connected.</p>
+
+<div class="step">
+  <h2>Step 1 — Restart stock into the bootloader</h2>
+  <p>Click, then pick the SteadyDigital's <strong>Sirius serial port</strong> (<code>1d6b:0210</code>). It reboots into the U-Boot download gadget.</p>
+  <button id="restart">Restart stock SteadyDigital</button>
+</div>
+
+<div class="step">
+  <h2>Step 2 — Load recovery into RAM</h2>
+  <p>After USB reconnects, click and pick <strong>USB download gadget</strong> (<code>1d6b:0100</code>). Already in that mode? Start here.</p>
+  <button id="prepare">Load recovery</button>
+</div>
+
+<h2>Log</h2>
+<div id="log"></div>
+
+<script type="module">
+import { P1HidRecovery, STEADYDIGITAL_RAM_FILES, STEADYDIGITAL_STOCK_USB, P1_HID_FILTER, sha256 } from './transports/p1-hid.js';
+
+const BASE = new URL('./assets/steadydigital-updater/browser-v1/', location.href);
+const logEl = document.getElementById('log');
+const log = (m, cls='') => { const d=document.createElement('div'); if(cls)d.className=cls; d.textContent=m; logEl.appendChild(d); logEl.scrollTop=logEl.scrollHeight; };
+
+const REBOOT_PACKET = Uint8Array.of(0xaa,0x05,0x00,0x1d,0x00,0x00,0xcc,0xeb,0xaa);
+
+document.getElementById('restart').onclick = async () => {
+  try {
+    if (!navigator.serial) throw new Error('Web Serial unavailable — use Chrome/Edge over localhost or https.');
+    // Filter to the stock SteadyDigital Sirius serial (1d6b:0210). If the picker
+    // shows "no compatible device" on macOS (Chrome sometimes omits serial USB
+    // IDs), remove the filters argument to list all ports and pick it manually.
+    const port = await navigator.serial.requestPort({ filters: [STEADYDIGITAL_STOCK_USB] });
+    const info = port.getInfo?.() || {};
+    if (info.usbVendorId && (info.usbVendorId !== STEADYDIGITAL_STOCK_USB.usbVendorId || info.usbProductId !== STEADYDIGITAL_STOCK_USB.usbProductId))
+      log(`Note: selected port reports ${info.usbVendorId?.toString(16)}:${info.usbProductId?.toString(16)} (expected 1d6b:0210).`, 'warn');
+    await port.open({ baudRate: 115200 });
+    const w = port.writable.getWriter();
+    await w.write(REBOOT_PACKET); w.releaseLock();
+    try { await port.close(); } catch {}
+    log('Reboot packet sent. Wait for USB to reconnect as "USB download gadget", then Step 2.', 'ok');
+  } catch (e) { log('Step 1 failed: ' + e.message, 'err'); }
+};
+
+async function loadAssets() {
+  const raw = new Uint8Array(await (await fetch(new URL('manifest.json', BASE), {cache:'no-store'})).arrayBuffer());
+  const manifest = JSON.parse(new TextDecoder().decode(raw));
+  if (manifest.format !== 1 || manifest.board_id !== 21316 || manifest.version !== 'browser-v1')
+    throw new Error('Unexpected SteadyDigital recovery manifest.');
+  const files = [];
+  for (const [name, [address, limit]] of Object.entries(STEADYDIGITAL_RAM_FILES)) {
+    const entry = manifest.files[name];
+    if (!entry || entry.address !== address || !(entry.size > 0 && entry.size <= limit)) throw new Error(`Bad manifest entry for ${name}.`);
+    const bytes = new Uint8Array(await (await fetch(new URL(name, BASE), {cache:'no-store'})).arrayBuffer());
+    if (bytes.length !== entry.size || await sha256(bytes) !== entry.sha256) throw new Error(`${name} size/SHA-256 mismatch.`);
+    log(`  verified ${name} (${bytes.length} bytes)`);
+    files.push({ name, bytes });
+  }
+  return { manifest, files };
+}
+
+document.getElementById('prepare').onclick = async () => {
+  try {
+    if (!navigator.hid) throw new Error('WebHID unavailable — use Chrome/Edge over localhost or https.');
+    log('Downloading and checking SteadyDigital recovery…');
+    const assets = await loadAssets();
+    const [device] = await navigator.hid.requestDevice({ filters: [{ vendorId: P1_HID_FILTER.vendorId, productId: P1_HID_FILTER.productId }] });
+    if (!device) { log('No device selected.', 'warn'); return; }
+    const link = new P1HidRecovery(device, {
+      stockVersion: '2.1.2',                 // → v2 layout (this unit's exact bootloader)
+      ramFiles: STEADYDIGITAL_RAM_FILES,
+      readChunk: 8,                          // SteadyDigital bootloader answers 8 data bytes/read (56-byte report)
+      writeChunk: 8,                         // …and commits 8 data bytes/write frame
+      log: (m) => log(m),
+      progress: ({ bytes, total }) => { const p = Math.floor(bytes*100/total); if (p !== lastPct) { lastPct = p; log(`  loading: ${p}%`); } },
+    });
+    let lastPct = -1;
+    await link.open(); log('Bootloader HID opened; checking layout…');
+    await link.identify(assets.manifest.bootloaders.v2.fingerprints);
+    log('Bootloader verified (v2 fingerprints + dispatch table).', 'ok');
+    // Upload the three recovery images to RAM (8 bytes/frame — kernel takes a few minutes).
+    // Write directly instead of link.upload(): upload()'s crc32-command verify is a
+    // >16-char command this unit truncates, so it false-fails. bootm verifies the
+    // kernel/initrd uImage CRCs itself, which is the real integrity check.
+    log('Uploading recovery into RAM — 8 bytes/frame, so the kernel takes a few minutes…');
+    for (const { name, bytes } of assets.files) { log(`Uploading ${name} (${bytes.length} bytes)…`); await link.write(STEADYDIGITAL_RAM_FILES[name][0], bytes); }
+    // Boot via short (<=16-char) commands: set three env vars to the RAM addresses,
+    // then `bootm $a $r $f` (this unit truncates longer command strings). bootm
+    // verifies the kernel's uImage CRC itself, so a dropped frame surfaces here.
+    const cmd = async (c) => { await link.send(6, new TextEncoder().encode(c)); await new Promise(r=>setTimeout(r,200)); log(`  => ${c}`); };
+    log('Booting recovery…');
+    await cmd('set a 24400000');     // kernel
+    await cmd('set r 26000000');     // initrd override
+    await cmd('set f 22080000');     // dtb
+    await cmd('bootm $a $r $f');     // expands to the full bootm; runs the recovery
+    log('Boot command sent. If the kernel CRC was good, the unit re-enumerates as the fpvOS updater in clean RAM mode.', 'ok');
+    log('Next: install with the flasher or fpvos-update (writes bank B, keeps stock in bank A).');
+    await link.close();
+  } catch (e) { log('Step 2 failed: ' + e.message, 'err'); }
+};
+</script>
+</body>
+</html>

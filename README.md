@@ -24,7 +24,8 @@ anything is sent, and the device does the flashing itself.
 | --- | --- | --- |
 | Ascent Lite / Lite+ | `Ascent_H_Sky_*.img`, stock or fpvOS | **flashed on real hardware** (the fpvOS beta3 air image, 2026-10-08; a user-confirmed stock upgrade 17.5.3 → 18.21.10); the Lite+ uses the same image and updater but is **not yet hardware-tested**; also tested on a simulated unit, in Node and in headless Chrome |
 | Ascent VRX (standard, Proxima-9311) | `Ascent_G_Gnd_*.img` signed stock, or a full `.fwu` for fpvOS | hardware-tested stock upgrades through 18.21.10 and unlocked downgrade to 17.5.8; the fpvOS install and stock-restore use the AR9311 recovery service (simulated tests only) |
-| BETAFPV P1 Air | full `fpvos-p1-air.fwu` from `p1-air-source` | **flashed on real hardware** (stock 1.0.44 → fpvOS through this page, 2026-11-03); browser preparation from supported stock 1.x/2.x, then installs and updates through fpvOS recovery |
+| BETAFPV P1 Air | full `fpvos-p1-air.fwu` from `p1-air-source` | **flashed on real hardware** (stock 1.0.44 → fpvOS through this page, 2026-11-03); browser preparation from supported stock 1.x/2.x (**the one-time stock step is Linux/ChromeOS only**; updates afterward work on any OS), then installs and updates through fpvOS recovery |
+| Skyzone SteadyDigital (AR9311) | full `.fwu` (board 21316) from `skyzone-steadydigital-flash` | installs into bank B and keeps stock in bank A, through the fpvOS recovery service; stock units are prepared from the browser: Connect recognises the stock Sirius port (`1d6b:0210`), restarts it into the U-Boot download gadget and loads the fpvOS RAM recovery over WebHID (the stock→recovery boot was hardware-verified; the bank-B install through the page is **not yet re-tested on hardware**). **The stock-preparation step is Linux/ChromeOS only** (macOS and Windows cannot drive the bootloader's USB interface); updates afterward work on any OS. Units already on fpvOS or the clean recovery install directly |
 
 **VRX Pro, Avatar, L_Gnd and goggles are not supported profiles.** The standard
 VRX uses board **5 / G_Gnd**.
@@ -79,7 +80,11 @@ handler fingerprints; 2.0.5 and 2.0.6 have been checked offline, not flashed
 on hardware. Automatic bootloader detection is unresolved: the selector assumes
 stock firmware and U-Boot are a matched vendor pair. Modified or mixed-bank
 units are not qualified for this preparation flow. Unlisted versions are rejected; this is not a promise of
-support for future 2.x releases. Windows/macOS are not yet qualified. Linux may require a USB/HID
+support for future 2.x releases. The preparation step is **Linux/ChromeOS only**: the stock
+bootloader's WebHID interface sends reports on IDs it does not declare as outputs, which only
+Linux (hidraw) and ChromeOS pass through to the device; macOS routes them to the control endpoint
+and Windows rejects them (both confirmed on hardware, 2026-11-20), so the page tells macOS/Windows
+users to run this one step on Linux/ChromeOS. Linux may require a USB/HID
 permission rule; see the [setup and recovery guide](assets/p1-updater/README.txt).
 
 Once recovery starts, select the **P1 Air** serial port
@@ -101,7 +106,11 @@ unit when prompted.
 This profile supports unsigned development bundles for the standard P1_SKY NAND
 layout. The firmware updater preserves stock bank 1, factory calibration and
 user settings. Stock P1 images and VRX restoration bundles are not accepted.
-The browser stock-preparation path is currently qualified on Linux only. See the
+The browser stock-preparation path works on **Linux and ChromeOS only**, by design:
+it drives the stock bootloader over a non-standard WebHID interface that only those
+OSes pass through to the device (macOS routes the reports to the control endpoint,
+Windows rejects them; verified on hardware). Do the one-time stock→fpvOS step from a
+Linux or ChromeOS machine; every update afterward works on any OS. See the
 [P1 firmware installation and recovery instructions](https://github.com/gehee/fpvOS/blob/main/br-external/board/p1-air/README.md#persistent-installation-and-usb-recovery)
 for the stock recovery command and firmware details. Keep verified
 device backups and recovery access.
@@ -214,7 +223,7 @@ CRC-32, CRC-64 or SHA-256 check. Archive integrity checks are verified.
   and the requested firmware are verified afterward. The page offers port
   reselection if permission is lost across a reboot.
 
-- Location: once an fpvOS goggle (the Ascent VRX) runs its new firmware,
+- Location: once an fpvOS goggle (VRX, SteadyDigital) runs its new firmware,
   the page gives it this computer's time zone (as a POSIX TZ string, from
   tzdata 2026e in `zones.js`; `tools/make-zones.py` updates it), the zone's name
   and its country. The goggle takes the zone only when SYSTEM > Time Zone is
@@ -249,7 +258,7 @@ The app is static ES modules with no build step or runtime packages:
 Use Node 22+, Python 3, `xz`, `tar`, and Chrome/Chromium for the full test suite:
 
 ```sh
-node --test test/test.mjs test/archive.test.mjs test/profiles.test.mjs test/unlock.test.mjs test/fpvos.test.mjs test/bootstrap.test.mjs test/p1-bootstrap.test.mjs
+node --test test/test.mjs test/archive.test.mjs test/profiles.test.mjs test/unlock.test.mjs test/fpvos.test.mjs test/bootstrap.test.mjs test/p1-bootstrap.test.mjs test/location.test.mjs test/hardware-matrix.test.mjs test/steadydigital-prepare.test.mjs test/prepare-support.test.mjs
 python3 tools/package-p1-recovery.py --check
 node test/browser-check.mjs
 ```

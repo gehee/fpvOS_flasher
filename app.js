@@ -9,6 +9,7 @@ import {
 } from './devices/index.js';
 import { prepareFirmware, evaluateSelection, flashFirmware, installResult } from './flasher.js';
 import { formatBytes } from './devices/common.js';
+import { browserPrepareSupport } from './prepare-support.js';
 
 const isOurs = (port) => !!profileForUsb(port.getInfo());
 const hex4 = (n) => (n ?? 0).toString(16).padStart(4, '0');
@@ -24,6 +25,8 @@ const state = {
   info: null,
   profile: null,     // positively identified connected hardware, never a UI override
   unlockOverride: null, // null = version-based automatic selection; boolean = manual choice
+  prepAssets: null,  // the recovery set being fetched for step 2 (a promise)
+  prepProfile: null, // the stock board being prepared (its profile's preparation block)
   p1Stage: null,     // stock P1 preparation: null | 'restart' (step 1 next) | 'recovery' (step 2 next) | 'done'
   connecting: false,
   image: null,       // { file, bytes, parsed, md5 }
@@ -75,9 +78,11 @@ async function connect() {
   } catch {
     return;   // chooser closed
   }
-  // A stock unit that must be prepared first (the P1 on its Sirius port) is not
-  // yet an fpvOS device, so it cannot just be opened: hand it to preparation.
-  if (!isOurs(port) && preparationForUsb(port.getInfo())) { await beginP1Preparation(port); return; }
+  // A stock unit that must be prepared first (a P1 or SteadyDigital on its
+  // Sirius port) is not yet an fpvOS device, so it cannot just be opened: hand
+  // it to preparation, which works from the profile the port belongs to.
+  const stock = isOurs(port) ? null : preparationForUsb(port.getInfo());
+  if (stock) { await beginPreparation(port, stock); return; }
   await openPort(port);
 }
 
@@ -193,31 +198,46 @@ function setUnitStatus(kind, text) {
   s.querySelector('span').textContent = text;
 }
 
-// Reached only from a Connect click where the chosen port is a stock P1 (its
-// Sirius serial id), never from auto-open on plug. Confirm, then run the first
-// step with the port we already have, so the restart needs no second chooser.
-async function beginP1Preparation(port) {
+// Reached only from a Connect click where the chosen port is a stock board's
+// Sirius serial id (profile.meta.preparation.serialFilter), never from
+// auto-open on plug. Confirm, then run the first step with the port we already
+// have, so the restart needs no second chooser.
+function showPreparationUi(profile) {
+  const { ui } = profile.meta.preparation;
+  state.prepProfile = profile;
+  $('prep-summary').textContent = `Prepare a ${ui.title.replace(/^Stock /, 'stock ')}`;
+  for (const el of document.querySelectorAll('.prep-name')) el.textContent = ui.name;
+  $('prep-confirm').textContent = ui.confirm;
+  $('p1-enter-bootloader').textContent = ui.restart;
+  $('p1-load-recovery').textContent = ui.load;
+}
+async function beginPreparation(port, profile) {
   if (state.busy || state.connecting || state.link) return;
-  const ok = await ask('Stock BETAFPV P1 Air',
-    'Prepare this unit in the browser and install fpvOS? Supported: a standard P1 Air on stock firmware 1.0.44, '
-    + 'kept on external power throughout. Other stock versions and P1 AIO models are not supported. '
-    + 'Nothing is written to flash yet; the bootloader is checked first.',
-    'Prepare');
+  const { ui } = profile.meta.preparation;
+  // The stock preparation step only works on Linux/ChromeOS (see prepare-support.js).
+  // On macOS/Windows, explain why rather than dropping the user into a flow that
+  // cannot talk to the bootloader; keep a deliberate opt-out for edge cases.
+  const osSupport = browserPrepareSupport(navigator.userAgent);
+  if (!osSupport.supported
+    && !await ask('Use Linux or ChromeOS for this step', osSupport.message, 'Try anyway')) return;
+  const ok = await ask(ui.title, ui.ask, 'Prepare');
   if (!ok) return;
+  showPreparationUi(profile);
   $('p1-preparation').open = true;
   $('p1-stock-confirm').checked = true;
   state.p1Stage = 'restart';
   render();
-  await prepareP1(false, port);
+  await prepareStock(false, port);
 }
 
-// Stock P1 uses Web Serial to enter U-Boot, then WebHID for RAM recovery.
+// A stock unit uses Web Serial to enter U-Boot, then WebHID for RAM recovery.
 // Each chooser must run directly from its own user gesture after re-enumeration;
 // the restart can reuse the port Connect already picked (presetPort).
 let preparationAbort = null;
-async function prepareP1(loadRecovery, presetPort = null) {
+async function prepareStock(loadRecovery, presetPort = null) {
   if (state.busy || state.connecting || state.link || !$('p1-stock-confirm').checked) return;
-  const preparation = getProfile('fpvos-p1-air').meta.preparation;
+  const profile = state.prepProfile ?? getProfile('fpvos-p1-air');
+  const preparation = profile.meta.preparation, { ui } = preparation;
   state.preparing = true;
   preparationAbort = new AbortController();
   const signal = preparationAbort.signal;
@@ -225,23 +245,30 @@ async function prepareP1(loadRecovery, presetPort = null) {
   render();
   try {
     if (loadRecovery) {
+      // The recovery images were fetched and checked while step 1 ran, so the
+      // bootloader is spoken to the moment its device is chosen: it is only
+      // up for a limited while, and the working order is assets first, chooser, I/O.
+      const assets = await (state.prepAssets ?? preparation.loadAssets({ signal })).catch(() => null) ?? undefined;
       const [device] = await navigator.hid.requestDevice({ filters: [preparation.hidFilter] });
-      if (!device) { progress('No bootloader selected. Select the same P1 when it appears as USB download gadget.'); return; }
-      await preparation.loadRecovery(device, { signal, progress, log });
+      if (!device) { progress(`No bootloader selected. Select the same ${ui.serialName} when it appears as USB download gadget.`); return; }
+      await preparation.loadRecovery(device, { stockVersion: preparation.stockVersion, assets, signal, progress, log });
+      state.prepAssets = null;
       state.p1Stage = 'done';
-      progress('Recovery boot requested. Wait for USB to reconnect, then click Connect above and select the P1 Air serial port. Choose your P1 .fwu file and click Flash.');
-      log('P1 recovery loaded through WebHID; connect its new serial port to install firmware.');
+      progress(`Recovery boot requested. Wait for USB to reconnect, then click Connect above and select the ${ui.serialName} serial port. Choose your ${ui.name} .fwu file and click Flash.`);
+      log(`${ui.name} recovery loaded through WebHID; connect its new serial port to install firmware.`);
     } else {
       const port = presetPort ?? await navigator.serial.requestPort({ filters: [preparation.serialFilter] });
+      state.prepAssets = preparation.loadAssets({ signal });   // fetched and verified now, used by step 2
+      state.prepAssets.catch(() => {});
       await preparation.enterBootloader(port, { signal });
       state.p1Stage = 'recovery';
-      progress('Restart requested. Wait for USB download gadget, then select it with “Load P1 recovery”. If it stays as Sirius, allow stock firmware to finish starting and retry Restart stock P1.');
-      log('Requested stock P1 USB bootloader through Web Serial.');
+      progress(`Restart requested. Wait for USB download gadget, then select it with “${ui.load.replace(/^\d+\. /, '')}”. If it stays as Sirius, allow stock firmware to finish starting and retry “${ui.restart.replace(/^\d+\. /, '')}”.`);
+      log(`Requested stock ${ui.name} USB bootloader through Web Serial.`);
     }
   } catch (e) {
     const message = e.name === 'NotFoundError' ? 'No device selected. You can try again.'
-      : `${e.message} If the P1 is still in USB download mode, retry Load P1 recovery; power-cycle it to return to its installed firmware.`;
-    progress(message); log(`P1 preparation: ${message}`, 'warn');
+      : `${e.message} If the unit is still in USB download mode, retry “${ui.load.replace(/^\d+\. /, '')}”; power-cycle it to return to its installed firmware.`;
+    progress(message); log(`${ui.name} preparation: ${message}`, 'warn');
   } finally { state.preparing = false; preparationAbort = null; render(); }
 }
 
@@ -881,8 +908,8 @@ function init() {
     state.p1Stage = $('p1-stock-confirm').checked ? (state.p1Stage ?? 'restart') : null;
     render();
   };
-  $('p1-enter-bootloader').onclick = () => prepareP1(false);
-  $('p1-load-recovery').onclick = () => prepareP1(true);
+  $('p1-enter-bootloader').onclick = () => prepareStock(false);
+  $('p1-load-recovery').onclick = () => prepareStock(true);
   $('p1-preparation-cancel').onclick = () => preparationAbort?.abort();
   $('disconnect').onclick = disconnect;
   $('netmode').onclick = networkMode;
