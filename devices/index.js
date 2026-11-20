@@ -3,8 +3,9 @@ import { ASCENT_AIR } from './ascent-air.js';
 import { ASCENT_VRX } from './ascent-vrx.js';
 import { FPVOS_AR9311 } from './fpvos-ar9311.js';
 import { FPVOS_P1_AIR } from './fpvos-p1-air.js';
+import { FPVOS_STEADYDIGITAL } from './fpvos-steadydigital.js';
 
-export const PROFILES = Object.freeze([ASCENT_AIR, ASCENT_VRX, FPVOS_AR9311, FPVOS_P1_AIR]);
+export const PROFILES = Object.freeze([ASCENT_AIR, ASCENT_VRX, FPVOS_AR9311, FPVOS_P1_AIR, FPVOS_STEADYDIGITAL]);
 export const USB_FILTERS = [...new Map(PROFILES.flatMap((p) => p.meta.usb).map((u) => [`${u.usbVendorId}:${u.usbProductId}`, u])).values()];
 // Stock units a profile can prepare in the browser (the P1's Sirius serial port)
 // are offered by Connect too, so a first-time unit is recognised rather than

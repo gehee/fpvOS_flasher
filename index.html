@@ -317,27 +317,29 @@
     <button id="connect" class="solid big">Connect</button>
     <!-- shown once Connect finds a stock P1: it needs preparing before fpvOS can go on -->
     <details id="p1-preparation" hidden>
-      <summary>Prepare a stock BETAFPV P1 Air</summary>
-      <p>This P1 runs its stock firmware: it needs this preparation before fpvOS can be installed. The page
+      <summary id="prep-summary">Prepare a stock BETAFPV P1 Air</summary>
+      <p>This <span class="prep-name">P1 Air</span> runs its stock firmware: it needs this preparation before fpvOS can be installed. The page
         has started step 1 for you. Keep external power connected and disconnect other Artosyn devices.</p>
-      <p>The same P1 appears as a serial port, a USB bootloader, then a recovery serial
+      <p>The same unit appears as a serial port, a USB bootloader, then a recovery serial
         port. Your browser asks for permission for each one.</p>
       <p><label><input id="p1-stock-confirm" type="checkbox">
-        This is a standard P1 Air with stock firmware 1.0.44. Other stock versions
-        and P1 AIO models are not supported.</label></p>
+        <span id="prep-confirm">This is a standard P1 Air with stock firmware 1.0.44. Other stock versions
+        and P1 AIO models are not supported.</span></label></p>
       <p><button id="p1-enter-bootloader">1. Restart stock P1</button>
         Select its Sirius serial port.</p>
       <p><button id="p1-load-recovery">2. Load P1 recovery</button>
         Select the same P1, now called USB download gadget.</p>
-      <p>Stuck in USB download mode from an earlier try? Power-cycle the P1 to return it to
+      <p>Stuck in USB download mode from an earlier try? Power-cycle the unit to return it to
         stock, then start again from Connect.</p>
       <p id="p1-browser-support" hidden>Stock preparation requires desktop Chrome or Edge
         with Web Serial and WebHID.</p>
       <p id="p1-preparation-status" role="status" aria-live="polite">After recovery starts,
-        press Connect and select the P1 Air serial port.</p>
+        press Connect and select the serial port of your unit.</p>
       <button id="p1-preparation-cancel" hidden>Cancel preparation</button>
-      <p>Preparation runs in RAM; it does not replace the bootloader. Tested on Linux Chromium;
-        Windows and macOS are not yet verified. Linux may need USB/HID permissions:
+      <p>Preparation runs in RAM; it does not replace the bootloader. This one-time step works on
+        <strong>Linux or ChromeOS only</strong> &mdash; macOS and Windows cannot drive the stock
+        bootloader's USB interface. Do it once from a Linux/ChromeOS machine (a live USB stick works);
+        afterwards you can update from any OS. Linux may need USB/HID permissions:
         <a href="assets/p1-updater/README.txt" target="_blank" rel="noopener">setup and recovery guide</a>.</p>
     </details>
     <details id="help">
