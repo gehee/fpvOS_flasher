@@ -38,7 +38,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --test test/test.mjs test/archive.test.mjs test/profiles.test.mjs test/unlock.test.mjs test/fpvos.test.mjs test/bootstrap.test.mjs test/p1-bootstrap.test.mjs test/location.test.mjs
+      - run: node --test test/test.mjs test/archive.test.mjs test/profiles.test.mjs test/unlock.test.mjs test/fpvos.test.mjs test/bootstrap.test.mjs test/p1-bootstrap.test.mjs test/location.test.mjs test/hardware-matrix.test.mjs test/steadydigital-prepare.test.mjs test/prepare-support.test.mjs
       - name: P1 recovery image
         run: |
           python3 tools/package-p1-recovery.py --check

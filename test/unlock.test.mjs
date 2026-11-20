@@ -119,7 +119,7 @@ async function shellRun({ mountFails = false, prepareFails = false, wrongCaller 
     trace: fs.existsSync(trace) ? fs.readFileSync(trace, 'utf8') : '', staged: fs.existsSync(local(plan.remotePath)) };
 }
 
-test('one-shot script execs from RAM, preserves metadata, overlays before vendor init and exits the sourcing shell', async () => {
+test('one-shot script execs from RAM, preserves metadata, overlays before vendor init and exits the sourcing shell', { skip: process.platform !== 'linux' && 'the unit script identifies its caller through /proc (Linux)' }, async () => {
   const r = await shellRun();
   assert.equal(r.status, 0);
   assert.equal(r.version, r.original.replace('18.21.10', '0.0.0'));
@@ -127,7 +127,7 @@ test('one-shot script execs from RAM, preserves metadata, overlays before vendor
   assert.equal(r.staged, false);
 });
 
-test('script failure restores the version overlay and requests a normal recovery reboot; wrong callers cannot run it', async () => {
+test('script failure restores the version overlay and requests a normal recovery reboot; wrong callers cannot run it', { skip: process.platform !== 'linux' && 'the unit script identifies its caller through /proc (Linux)' }, async () => {
   for (const opts of [{ mountFails: true }, { prepareFails: true }]) {
     const r = await shellRun(opts);
     assert.equal(r.status, 1);
