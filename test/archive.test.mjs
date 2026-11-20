@@ -5,7 +5,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -93,7 +93,9 @@ test('tar, .tar.gz and .tar.xz, with long names', { skip: !(HAS_TAR && HAS_XZ) &
   mkdirSync(deep, { recursive: true });
   writeFileSync(path.join(deep, 'Ascent_H_Sky_18_21_10.img'), IMG);
   writeFileSync(path.join(deep, 'notes.txt'), 'hello');
-  for (const [fmt, out, z] of [['gnu', 'gnu.tar', []], ['posix', 'pax.tar.gz', ['-z']], ['ustar', 'ustar.tar.xz', ['-J']]]) {
+  // bsdtar (macOS) spells GNU's format 'gnutar'
+  const gnu = spawnSync('tar', ['-c', '--format=gnu', '-f', path.join(dir, 'probe.tar'), '-C', path.join(dir, 'src'), 'notes.txt']).status === 0 ? 'gnu' : 'gnutar';
+  for (const [fmt, out, z] of [[gnu, 'gnu.tar', []], ['posix', 'pax.tar.gz', ['-z']], ['ustar', 'ustar.tar.xz', ['-J']]]) {
     execFileSync('tar', ['-c', `--format=${fmt}`, ...z, '-f', path.join(dir, out), '-C', path.join(dir, 'src'), '.']);
     const r = await open(path.join(dir, out));
     assert.equal(r.name, 'Ascent_H_Sky_18_21_10.img', out);

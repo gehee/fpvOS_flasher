@@ -14,7 +14,8 @@
   const installFailure = params.has('installFailure');
   const VID = type === 'air' ? 0x1d76 : 0x1d75;
   let custom = type === 'fpvos' || type === 'p1';
-  const stockP1 = type === 'p1stock';   // a stock P1 on its Sirius serial port, not yet fpvOS
+  const stockP1 = type === 'p1stock' || type === 'sdstock';   // a stock P1 / SteadyDigital on its Sirius serial port, not yet fpvOS
+  const stockPid = type === 'sdstock' ? 0x0210 : 0x0101;
   const name = type === 'air' ? 'Ascent_H_Sky' : type === 'vrx' ? 'Ascent_VRX' : 'Ascent_VRX_Pro';
   const factory = { name, serial: 'FAKE0001', hardware: type === 'air' ? 'FPV-Ascent-Sky-482-V1.3-1.0'
     : type === 'vrx' ? 'FPV-Ascent-Gnd-485-V1.2-1.0' : 'HW_V1.0' };
@@ -39,7 +40,7 @@
     constructor(dev) { super(); this.dev = dev; this.readable = null; this.writable = null; }
 
     getInfo() {
-      if (this.dev.stockP1) return { usbVendorId: 0x1d6b, usbProductId: 0x0101 };
+      if (this.dev.stockP1) return { usbVendorId: 0x1d6b, usbProductId: stockPid };
       // an fpvOS P1 in bridge mode: the running AR8030's ids, the serial port kept
       if (this.dev.custom && type === 'p1' && this.dev.mode === 'bridge') return { usbVendorId: 0x1d6b, usbProductId: 0x8030 };
       return this.dev.custom ? { usbVendorId: 0x1d6b, usbProductId: 0x0104 } : { usbVendorId: VID, usbProductId: 0x0101 };

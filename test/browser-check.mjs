@@ -53,9 +53,54 @@ async function p1PreparationControls() {
   await js(`navigator.hid.requestDevice = () => new Promise(resolve => { window.resolveP1Chooser = resolve; });
     document.querySelector('#p1-load-recovery').click();`);
   if (!await js("document.querySelector('#connect').disabled && document.querySelector('#p1-enter-bootloader').disabled && !document.querySelector('#p1-preparation-cancel').hidden && !/…$/.test(document.querySelector('#flash').textContent)")) throw new Error('Preparation must lock competing actions without claiming a firmware flash.');
+  // the recovery set is fetched before the chooser opens, so the chooser appears a moment after the click
+  await until("typeof window.resolveP1Chooser === 'function'", 5000, 'HID chooser requested');
   await js("document.querySelector('#p1-preparation-cancel').click(); window.resolveP1Chooser([])");
   await until("!document.querySelector('#p1-load-recovery').disabled && document.querySelector('#p1-preparation-cancel').hidden", 3000);
   if (!await js("document.querySelector('#p1-preparation-status').textContent.includes('No bootloader selected')")) throw new Error('Empty chooser must leave a retryable status.');
+}
+
+async function steadyDigitalStockDetection() {
+  console.log('--- SteadyDigital stock detection from Connect, same panel as the P1');
+  await cdp('Page.navigate', { url: `${base}?device=sdstock` });
+  await until("document.readyState === 'complete' && !document.querySelector('#connect').hidden", 10000, 'stock SteadyDigital page');
+  const fail = [];
+  if (!await js("document.querySelector('#unit-info').hidden")) fail.push('stock SteadyDigital auto-connected as a device');
+  if (!await js("document.querySelector('#p1-preparation').hidden")) fail.push('preparation shown before a stock SteadyDigital was found');
+  await js("document.querySelector('#connect').click()");
+  await until("document.querySelector('#ask').open", 3000, 'stock SteadyDigital prepare confirm');
+  if (!await js("/Skyzone SteadyDigital/.test(document.querySelector('#ask-title')?.textContent ?? document.querySelector('#ask').textContent) && !/P1/.test(document.querySelector('#ask').textContent)")) fail.push('confirm names the wrong board');
+  await js("document.querySelector('#ask-ok').click()");
+  await until("Array.isArray(window.__fake.p1RebootRaw)", 5000, 'restart sent');
+  if (String(await js("window.__fake.p1RebootRaw")) !== String([0xaa, 5, 0, 0x1d, 0, 0, 0xcc, 0xeb, 0xaa])) fail.push('wrong SteadyDigital restart bytes');
+  await until("document.querySelector('#p1-preparation-cancel').hidden", 5000, 'restart finished');
+  if (!await js("/SteadyDigital/.test(document.querySelector('#prep-summary').textContent) && !/P1/.test(document.querySelector('#p1-enter-bootloader').textContent + document.querySelector('#p1-load-recovery').textContent)")) fail.push('panel still carries the P1 wording');
+  if (!await js("document.querySelector('#p1-enter-bootloader').classList.contains('step-done') && document.querySelector('#p1-load-recovery').classList.contains('step-active')")) fail.push('steps not walked: 1 done, 2 lit');
+  return fail;
+}
+
+async function preparationBlockedOffLinux(linuxUA) {
+  console.log('--- stock preparation is gated off Linux/ChromeOS (macOS message + opt-out)');
+  const fail = [];
+  const macUA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36';
+  await cdp('Emulation.setUserAgentOverride', { userAgent: macUA });
+  try {
+    await cdp('Page.navigate', { url: `${base}?device=sdstock` });
+    await until("document.readyState === 'complete' && !document.querySelector('#connect').hidden", 10000, 'stock page (mac UA)');
+    await js("document.querySelector('#connect').click()");
+    await until("document.querySelector('#ask').open", 3000, 'OS-gate dialog');
+    if (!await js("/Linux or ChromeOS/.test(document.querySelector('#ask-title').textContent)")) fail.push('gate dialog title does not point to Linux/ChromeOS');
+    if (!await js("/macOS/.test(document.querySelector('#ask-text').textContent) && /Linux or ChromeOS/.test(document.querySelector('#ask-text').textContent)")) fail.push('gate message does not name macOS and Linux/ChromeOS');
+    // declining the gate must not start preparation or send a reboot
+    await js("document.querySelector('#ask').close('cancel')");
+    await new Promise((r) => setTimeout(r, 300));
+    if (!await js("document.querySelector('#p1-preparation').hidden")) fail.push('preparation panel opened despite declining the gate');
+    if (await js("Array.isArray(window.__fake.p1RebootRaw)")) fail.push('a reboot was sent despite declining the gate');
+    await shot('prepare-blocked-off-linux');
+  } finally {
+    await cdp('Emulation.setUserAgentOverride', { userAgent: linuxUA });
+  }
+  return fail;
 }
 
 async function p1StockDetection() {
@@ -529,8 +574,15 @@ try {
   await cdp('Page.addScriptToEvaluateOnNewDocument', {
     source: `window.__fake = { regrant: !location.search.includes('regrant=0') };\n${fake}`,
   });
+  // The stock-preparation gate (prepare-support.js) is OS-gated, and this check
+  // may run on any host. Pin a Linux UA so the stock-detection scenarios test the
+  // supported path deterministically; the gate itself is covered separately.
+  const LINUX_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36';
+  await cdp('Emulation.setUserAgentOverride', { userAgent: LINUX_UA });
   await p1PreparationControls();
   failures.push(...await p1StockDetection());
+  failures.push(...await steadyDigitalStockDetection());
+  failures.push(...await preparationBlockedOffLinux(LINUX_UA));
   failures.push(...await scenario('kept', '?fw=17_5_3', { reselect: false }));
   failures.push(...await scenario('zip', '', { reselect: false, file: zip }));
   failures.push(...await scenario('xz', '', { reselect: false, file: xzFile }));

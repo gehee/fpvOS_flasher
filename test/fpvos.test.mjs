@@ -9,6 +9,7 @@ import { storedZip } from './fixtures.mjs';
 import { FPVOS_P1_AIR, parseP1Bundle } from '../devices/fpvos-p1-air.js';
 import { WebSerialLink } from '../transports/web-serial.js';
 import { FPVOS_REBOOT_VERIFY } from '../stages/fpvos.js';
+import { FPVOS_STEADYDIGITAL, parseFpvosBundle as parseSteadyDigitalBundle } from '../devices/fpvos-steadydigital.js';
 
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 function bundle(kind = 0, board = 485) {
@@ -21,7 +22,8 @@ function bundle(kind = 0, board = 485) {
   payloads.forEach((p, i) => {
     const o = 96 + 104 * i;
     h.write((board === 485 ? ['kernel.img', 'ascent-gnd485.dtb', 'rootfs.cpio.uboot']
-      : ['kernel.img', 'betafpv-p1-air.dtb', 'rootfs.cpio.gz'])[i], o);
+      : board === 21316 ? ['kernel.img', 'skyzone-steadydigital.dtb', 'rootfs.squashfs']
+        : ['kernel.img', 'betafpv-p1-air.dtb', 'rootfs.cpio.gz'])[i], o);
     h.writeUInt32LE(p.length, o + 32); h.write(sha(p), o + 36);
   });
   h.writeUInt32LE(crc32(h), 508);
@@ -249,6 +251,8 @@ test('after a flash the goggle gets this computer\'s time zone, once it runs fpv
     assert.deepEqual([text(session.location, 0, 64), text(session.location, 64, 128), text(session.location, 128)], [where.tz, where.zone, where.country]);
     assert.ok(logs.some((l) => /time zone Europe\/Paris/.test(l)), logs.join('\n'));
   }
+  // the SteadyDigital's flash runs the same steps
+  assert.deepEqual(getProfile('fpvos-steadydigital').stages.postflash, FPVOS_AR9311.stages.postflash);
   const logs = [], older = fakeSession(image, { noLocation: true });
   assert.equal((await flashFirmware(older, FPVOS_AR9311, image, { info, location: where, log: (m, l = 'info') => logs.push(`${l} ${m}`) })).firmware, image.parsed.sha256);
   assert.ok(logs.some((l) => /^warn the goggle did not take .*location not kept/.test(l)), logs.join('\n'));
@@ -259,4 +263,20 @@ test('after a flash the goggle gets this computer\'s time zone, once it runs fpv
 
 test('air units are not given a location', () => {
   for (const id of ['ascent-air', 'fpvos-p1-air']) assert.ok(!getProfile(id).stages.postflash.some((s) => s.name === 'SEND_LOCATION'), id);
+});
+
+test('SteadyDigital: the .fwu fpvOS builds (rootfs.squashfs) selects and passes its profile; the old cpio root does not', async () => {
+  const sdInfo = { ...info, hardware: 'SteadyDigital', serial: 'fpvos-steadydigital' };
+  const image = await prepareFirmware(new File([bundle(0, 21316)], 'fpvos-steadydigital.fwu'));
+  assert.equal(image.parsed.profileId, 'fpvos-steadydigital');
+  assert.deepEqual(image.parsed.errors, []);
+  assert.deepEqual(image.parsed.sections.map((s) => s.name), ['kernel.img', 'skyzone-steadydigital.dtb', 'rootfs.squashfs']);
+  assert.equal(evaluateSelection({ info: sdInfo, profile: FPVOS_STEADYDIGITAL, image }).canFlash, true);
+  const cpio = fixHeader(bundle(0, 21316));
+  cpio.fill(0, 96 + 104 * 2, 96 + 104 * 2 + 32); cpio.write('rootfs.cpio.gz', 96 + 104 * 2); fixHeader(cpio);
+  assert.ok((await parseSteadyDigitalBundle(cpio)).errors.length);
+  const big = bundle(0, 21316);
+  big.writeUInt32LE(25165825, 96 + 104 * 2 + 32); fixHeader(big);
+  assert.ok((await parseSteadyDigitalBundle(big)).errors.length);
+  assert.ok((await parseFpvosBundle(bundle(0, 21316))).errors.length);
 });

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { P1HidRecovery, P1_RAM_FILES, enterP1Bootloader, sha256 } from '../transports/p1-hid.js';
-import { loadP1Recovery, prepareP1Recovery } from '../stages/p1-bootstrap.js';
+import { loadP1Recovery, prepareP1Recovery, prepareSteadyDigitalRecovery } from '../stages/p1-bootstrap.js';
 import { crc32 } from '../checksum.js';
 const TABLE = 0x2ffbf290, MAGIC = 0x2ffbf378, CALLBACK = 0x2ffbf330;
 class FakeHid extends EventTarget {
@@ -196,8 +196,10 @@ test('a failed version-specific probe does not try another bootloader layout', a
   const link = new P1HidRecovery(d, { stockVersion: '1.0.44', readTimeout: 20 }); await link.open();
   try {
     await assert.rejects(link.identify(fps), /No compatible/);
-    assert.deepEqual(d.writes, [{ address: MAGIC, bytes: 1 }]);
+    // the same one-byte probe of the chosen layout is retried; no other address, layout or command is ever used
+    assert.ok(d.writes.length >= 1 && d.writes.every((w) => w.address === MAGIC && w.bytes === 1), JSON.stringify(d.writes));
     assert.equal(d.commands.length, 0); assert.equal(link.verified, false);
+    assert.match(link.diagnostics(), /probe 4\/4 sent/);
   } finally { await link.close(); }
 });
 
@@ -207,4 +209,63 @@ test('bundled recovery includes its hash-pinned corresponding source patch', asy
   assert.equal(patch.length, manifest.source_patch.size);
   assert.equal(await sha256(patch), manifest.source_patch.sha256);
   assert.match(new TextDecoder().decode(patch), /backends\/p1-air\/layout\.h/);
+});
+
+// A host that needs more than one probe, or a fresh HID handle, still reaches the
+// verified bootloader; the fingerprints and dispatch table gate everything after.
+test('a slow host: the probe is retried until the bootloader answers, and the trace says so', async () => {
+  const d = new FakeHid('v2'); const fps = await d.fingerprints();
+  d.dropReplies = true;
+  const send = d.sendReport.bind(d);
+  d.sendReport = async (...a) => { await send(...a); if (d.frames.length >= 6) d.dropReplies = false; };   // first read, probe 1, its read, then probe 2
+  const link = new P1HidRecovery(d, { stockVersion: '2.1.2', readTimeout: 60 }); await link.open();
+  try {
+    await link.identify(fps);
+    assert.equal(link.verified, true);
+    assert.match(link.diagnostics(), /probe 2\/4 sent/);
+    assert.doesNotMatch(link.diagnostics(), /reopening/);
+  } finally { await link.close(); }
+});
+test('a stale handle: the device is reopened once and then answers', async () => {
+  const d = new FakeHid('v2'); const fps = await d.fingerprints();
+  d.dropReplies = true;
+  const open = d.open.bind(d); let opens = 0;
+  d.open = async () => { await open(); if (++opens === 2) d.dropReplies = false; };
+  const link = new P1HidRecovery(d, { stockVersion: '2.1.2', readTimeout: 60 }); await link.open();
+  try {
+    await link.identify(fps);
+    assert.equal(link.verified, true);
+    assert.match(link.diagnostics(), /reopening the HID handle/);
+  } finally { await link.close(); }
+});
+test('a bootloader that never answers fails with advice, after bounded retries and without a command', async () => {
+  const d = new FakeHid('v2'); const fps = await d.fingerprints();
+  d.dropReplies = true;
+  const link = new P1HidRecovery(d, { stockVersion: '2.1.2', readTimeout: 30 }); await link.open();
+  try {
+    await assert.rejects(link.identify(fps), /No compatible P1 bootloader reply after 4 probes.*Quit the browser completely.*power-cycle/s);
+    assert.equal(d.commands.length, 0); assert.equal(link.verified, false);
+  } finally { await link.close(); }
+});
+test('the trace names the device, its reports and every timeout, and is bounded', async () => {
+  const d = new FakeHid('v2'); const fps = await d.fingerprints();
+  const link = new P1HidRecovery(d, { stockVersion: '2.1.2', readTimeout: 20 }); await link.open();
+  await link.identify(fps).catch(() => {});
+  const text = link.diagnostics();
+  assert.match(text, /opened 1d6b:100 "USB download gadget"/);
+  assert.match(text, /"in":\[4\],"out":\[2\]/);
+  assert.match(text, /timed out after/);
+  assert.match(text, /reports received: \d+/);
+  for (let i = 0; i < 1000; i++) link.note('x');
+  assert.ok(link.diag.length <= 200);
+  await link.close();
+});
+test('a failed SteadyDigital preparation writes the HID trace into the log, before any RAM write', async () => {
+  const d = new FakeHid('v2'); d.dropReplies = true;
+  const lines = [];
+  d.productName = 'USB download gadget';
+  await assert.rejects(prepareSteadyDigitalRecovery(d, { fetcher: async (url) => new Response(await fs.readFile(new URL('../assets/steadydigital-updater/browser-v1/' + new URL(url).pathname.split('/').pop(), import.meta.url))),
+    log: (m) => lines.push(m), readTimeout: 20 }), /No compatible P1 bootloader reply/);
+  assert.ok(lines.some((l) => /HID diagnostics/.test(l)), 'trace logged');
+  assert.equal(d.writes.filter((w) => w.address !== d.layout.magic).length, 0);
 });
