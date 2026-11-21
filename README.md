@@ -2,334 +2,181 @@
 
 **<https://gehee.github.io/fpvOS_flasher/>**
 
-> **Experimental: use it at your own risk.** The flasher is new and not yet
-> tested on every device and firmware. Flashing can leave a device that has to
-> be recovered by hand.
+> **Experimental: use it at your own risk.** Flashing can leave a device that
+> has to be recovered by hand.
 
-**Flashing the fpvOS air image?** The step-by-step guide, with what to expect
-and how to go back to stock, is in
+A web page that flashes FPV devices over USB, in Chrome or Edge on a desktop
+computer. There is nothing to install. The page checks the image, then talks to
+the updater already on the device, which does the flashing itself.
+
+Flashing the fpvOS air image? Follow
 [fpvOS's install guide](https://github.com/gehee/fpvOS/blob/main/docs/INSTALL.md#flash-the-air-unit-optional).
-
-A web page that flashes FPV devices over USB. It runs in Chrome or Edge on a
-desktop computer (Linux, Windows, macOS) through the Web Serial API. There is
-nothing to install.
-
-For each device, the page talks to the updater that already runs on it, with
-the same messages the vendor's PC tool uses. It checks the image before
-anything is sent, and the device does the flashing itself.
 
 ## Supported devices
 
-| Device | Images | Status |
-| --- | --- | --- |
-| Ascent Lite / Lite+ | `Ascent_H_Sky_*.img`, stock or fpvOS | **flashed on real hardware** (the fpvOS beta3 air image, 2026-10-08; a user-confirmed stock upgrade 17.5.3 → 18.21.10); the Lite+ uses the same image and updater but is **not yet hardware-tested**; also tested on a simulated unit, in Node and in headless Chrome |
-| Ascent VRX (standard, Proxima-9311) | `Ascent_G_Gnd_*.img` signed stock, or a full `.fwu` for fpvOS | hardware-tested stock upgrades through 18.21.10 and unlocked downgrade to 17.5.8; the fpvOS install and stock-restore use the AR9311 recovery service (simulated tests only) |
-| BETAFPV P1 Air | full `fpvos-p1-air.fwu` from `p1-air-source` | **flashed on real hardware** (stock 1.0.44 → fpvOS through this page, 2026-11-03); browser preparation from supported stock 1.x/2.x (**the one-time stock step is Linux/ChromeOS only**; updates afterward work on any OS), then installs and updates through fpvOS recovery |
-| Skyzone SteadyDigital (AR9311) | full `.fwu` (board 21316) from `skyzone-steadydigital-flash` | installs into bank B and keeps stock in bank A, through the fpvOS recovery service; stock units are prepared from the browser: Connect recognises the stock Sirius port (`1d6b:0210`), restarts it into the U-Boot download gadget and loads the fpvOS RAM recovery over WebHID (the stock→recovery boot was hardware-verified; the bank-B install through the page is **not yet re-tested on hardware**). **The stock-preparation step is Linux/ChromeOS only** (macOS and Windows cannot drive the bootloader's USB interface); updates afterward work on any OS. Units already on fpvOS or the clean recovery install directly |
+✅ supported and tested on hardware from that OS · ☑️ supported, not yet tested
+on hardware from that OS · ❌ not supported. Every path also runs in the
+simulated tests (Node and headless Chrome, on Linux in CI).
 
-**VRX Pro, Avatar, L_Gnd and goggles are not supported profiles.** The standard
-VRX uses board **5 / G_Gnd**.
-The Pro's Rockchip container is different, even though its PC upload protocol
-is shared. Modified standard VRX images require a signature accepted by its
-stock updater; the page rejects images that do not verify with the pinned key.
+### Stock → fpvOS
 
-See [Architecture](docs/architecture.md) for the device-module contract.
+One row per stock version: check your unit's stock version against it. A
+version not listed is not supported (the Ascent Lite's stock updater takes the
+image without a version check, so other Lite versions may work).
 
-### AR9311 custom firmware (in development)
+| Device | Stock version | Linux | ChromeOS | macOS | Windows | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| Ascent Lite | 17.5.3 | ☑️ | ☑️ | ☑️ | ☑️ | |
+| | 18.21.10 | ☑️ | ☑️ | ☑️ | ☑️ | |
+| Ascent Lite+ | 18.21.10 | ☑️ | ☑️ | ☑️ | ☑️ | not yet hardware-tested; keeps its serial number |
+| Ascent VRX | 17.5.3 | ☑️ | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
+| | 17.5.8 | ☑️ | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
+| | 18.21.10 | ☑️ | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
+| BETAFPV P1 Air | 1.0.44 | ✅ | ☑️ | ❌ | ❌ | flashed by gehee (Linux Chromium, 2026-11-03) |
+| | 2.0.5 | ☑️ | ☑️ | ❌ | ❌ | bootloader checked offline only; needs a P1 build with the U-Boot bank-selection fix |
+| | 2.0.6 | ☑️ | ☑️ | ❌ | ❌ | bootloader checked offline only; needs the bank-selection fix |
+| | 2.1.2 | ✅ | ☑️ | ❌ | ❌ | flashed by mh1412 (PR #2); needs the bank-selection fix |
+| Skyzone SteadyDigital | SD10P_V2.0.0B03 | ✅ | ☑️ | ❌ | ❌ | stock → recovery boot verified on Linux 2026-11-19; the install into bank B (stock kept in bank A) not yet re-tested |
 
-On a healthy standard VRX running stock 17.5.3, 17.5.8 or 18.21.10, select a full
-`fpvos-ar9311.fwu` bundle. The browser verifies and stages its bundled RAM updater
-and tiny launcher, arms the one-shot clean hook, and reboots. **Disconnect other
-VRXs and explicitly select this unit's new RAM-updater USB port when asked.**
-This initial USB bootstrap is experimental and has **not been hardware-validated**.
-No host backup export is performed. The established U-Boot RAM-loading route
-remains available, and an already-running fpvOS system uses built-in recovery.
-The service supports unsigned bundles without version ordering. The page requires
-readback-complete status and verifies the package SHA-256 after reboot. Keep
-external DC power connected: shared kernel/DTB writes are not power-loss atomic.
+A Lite was flashed to fpvOS beta3 on hardware (2026-10-08), but its stock
+version and host OS were not recorded. The P1 Air's rebuilt recovery needs a
+repeat hardware test.
 
-An original-backup restoration `.fwu` restores the stock kernel/DTB and checks
-stock boot identity. Preserve the original partition backups before installing.
-This is not installation of an arbitrary vendor release. Vendor `.img`
-installation through our updater is **not implemented yet**; the existing
-signed-stock path is unchanged. The stock-kernel/root-only
-`ar9311-vendor` build is not supported.
+The P1 Air and SteadyDigital first install starts with a one-time preparation
+over WebHID that works **only on Linux and ChromeOS**: macOS and Windows cannot
+send the stock bootloader's reports (confirmed on a SteadyDigital, 2026-11-20;
+the P1 has the same loader). The page says so on other OSes.
 
-### BETAFPV P1 Air
+### fpvOS → fpvOS (updates)
 
-For **standard P1_SKY / stock 1.0.44, 2.0.5, 2.0.6 or 2.1.2**, first select
-the installed stock version in the preparation panel, then click **Connect** and pick the
-P1's Sirius serial port: the flasher recognises a stock P1 and offers to prepare
-it, starting the restart for you. (You can also expand “Installing fpvOS on a
-stock BETAFPV P1?” in the Device panel and run the steps by hand.) After it
-restarts, use **Load P1 recovery** to select that same unit as **USB download
-gadget**. If the unit is stuck in USB download mode from an earlier try,
-power-cycle it back to stock and start again from Connect. Once fpvOS is
-installed, Connect reaches the unit directly.
+| Device | How | Linux | ChromeOS | macOS | Windows | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| Ascent Lite / Lite+ | fpvOS `.img` through the unit's updater | ☑️ | ☑️ | ☑️ | ☑️ | host OS not recorded |
+| Ascent VRX | `.fwu` through fpvOS recovery | ☑️ | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
+| BETAFPV P1 Air | `.fwu` through fpvOS recovery | ☑️ | ☑️ | ☑️ | ☑️ | the 2026-11-03 install ran this step on Linux; no later update recorded |
+| Skyzone SteadyDigital | `.fwu` through fpvOS recovery | ☑️ | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
 
-The page downloads hash-pinned recovery assets, checks the known bootloader,
-uploads them to RAM through WebHID and verifies their device-side CRCs before
-booting independent recovery. It does not flash the bootloader. No Linux
-preparation helper, SSH or USB networking is used. Each USB mode requires its
-own browser permission. Keep external power connected throughout.
+Stock → stock (Ascent signed upgrades, the unlocked VRX downgrade to 17.5.8)
+works on any OS and was hardware-tested; host OS not recorded.
 
-The preparation and installation path was hardware-tested on Linux Chromium
-with stock 1.0.44 and 2.1.2. The recovery rebuilt on the latest upstream fixes
-still needs a repeat hardware test. The 2.x path uses a separate bootloader layout; 2.0.5, 2.0.6 and 2.1.2 share the checked
-handler fingerprints; 2.0.5 and 2.0.6 have been checked offline, not flashed
-on hardware. Automatic bootloader detection is unresolved: the selector assumes
-stock firmware and U-Boot are a matched vendor pair. Modified or mixed-bank
-units are not qualified for this preparation flow. Unlisted versions are rejected; this is not a promise of
-support for future 2.x releases. The preparation step is **Linux/ChromeOS only**: the stock
-bootloader's WebHID interface sends reports on IDs it does not declare as outputs, which only
-Linux (hidraw) and ChromeOS pass through to the device; macOS routes them to the control endpoint
-and Windows rejects them (both confirmed on hardware, 2026-11-20), so the page tells macOS/Windows
-users to run this one step on Linux/ChromeOS. Linux may require a USB/HID
-permission rule; see the [setup and recovery guide](assets/p1-updater/README.txt).
+**Not supported:** VRX Pro (it boots fpvOS from an SD card, see the
+[install guide](https://github.com/gehee/fpvOS/blob/main/docs/INSTALL.md)),
+Avatar, L_Gnd and the P1 goggles.
 
-Once recovery starts, select the **P1 Air** serial port
-in the browser and select `fpvos-p1-air.fwu` from the fpvOS `p1-air-source` build.
-For stock 2.x, use a P1 firmware build including the environment/U-Boot bank
-selection fix in [source.patch](assets/p1-updater/browser-v1/source.patch); older
-P1 bundles can reject the v2 boot layout. Rebuild the firmware after applying
-that patch to the source revision in the recovery guide.
-An already-installed fpvOS unit can connect directly without stock preparation. The page
-enters clean recovery, validates and transfers the full kernel/DTB/rootfs bundle,
-waits for device-side installation and readback, then reboots and checks the
-running package SHA-256. Keep external power connected throughout.
+### AR9311 custom firmware
 
-P1 and fpvOS VRX use the same USB IDs. The page identifies the board from the
-updater response and bundle header; renaming a file cannot permit cross-flashing. Reconnection checks the updater identity before
-continuing. If several matching ports are available, select the same physical
-unit when prompted.
+On a standard VRX on a supported stock version, pick a full `fpvos-ar9311.fwu`.
+The page loads a RAM updater, reboots into it and installs; **when asked, select
+this unit's new USB port**, with other VRXs unplugged. A unit already on fpvOS
+updates through its built-in recovery. Keep external DC power connected: the
+kernel/DTB writes are not power-loss safe. A restoration `.fwu` puts the stock
+kernel/DTB back from the unit's original backups. See
+[AR9311 fpvOS recovery service](docs/architecture.md#ar9311-fpvos-recovery-service).
 
-This profile supports unsigned development bundles for the standard P1_SKY NAND
-layout. The firmware updater preserves stock bank 1, factory calibration and
-user settings. Stock P1 images and VRX restoration bundles are not accepted.
-The browser stock-preparation path works on **Linux and ChromeOS only**, by design:
-it drives the stock bootloader over a non-standard WebHID interface that only those
-OSes pass through to the device (macOS routes the reports to the control endpoint,
-Windows rejects them; verified on hardware). Do the one-time stock→fpvOS step from a
-Linux or ChromeOS machine; every update afterward works on any OS. See the
-[P1 firmware installation and recovery instructions](https://github.com/gehee/fpvOS/blob/main/br-external/board/p1-air/README.md#persistent-installation-and-usb-recovery)
-for the stock recovery command and firmware details. Keep verified
-device backups and recovery access.
+### BETAFPV P1 Air and Skyzone SteadyDigital
+
+1. On stock, click **Connect** and pick the unit's Sirius port. The page
+   recognises it and offers to prepare it (for the P1, first pick its stock
+   version in the preparation panel).
+2. It restarts the unit into its USB download mode; click **2. Load P1 recovery** (or **SteadyDigital recovery**) and
+   pick the **USB download gadget**. The page checks the bootloader and loads
+   the fpvOS recovery into RAM; nothing is written to flash yet.
+3. In recovery, pick the unit's serial port and its `.fwu` (`fpvos-p1-air.fwu`
+   or the `skyzone-steadydigital-flash` build). The page installs it, reboots and
+   checks the running package's SHA-256.
+
+Once on fpvOS, Connect reaches the unit directly. Stock bank, factory
+calibration and settings are kept. A unit stuck in USB download mode is
+power-cycled back to stock. Keep external power connected. Linux may need a USB
+permission rule: see the [P1 recovery guide](assets/p1-updater/README.txt) and
+the [P1 firmware README](https://github.com/gehee/fpvOS/blob/main/br-external/board/p1-air/README.md#persistent-installation-and-usb-recovery).
 
 ## Use
 
-Open the page above. A local copy also works: Web Serial needs a secure page,
-which `http://localhost` is.
+1. Plug in the device (**a standard VRX needs external DC power too**), click
+   **Connect** and pick its port.
+2. The page shows the device and what it runs. **Install fpvOS <release>**
+   downloads the image published for it, checks it and asks once before
+   flashing. Only devices proven on hardware get one (the Ascent Lite / Lite+
+   for now).
+
+To flash your own file, open **More options**, drop an image or an archive
+holding one (the vendor's `.zip` works as is), read the checks and click
+**Flash this file**. An older standard VRX image turns on **Unlock before
+flashing** by itself ([VRX preparation](docs/architecture.md#vrx-preparation)).
+`?dev` in the address adds developer options.
+
+Close the vendor's PC tool and any serial terminal first: only one program can
+open the port. On Linux your user needs `/dev/ttyACM*` access (the `dialout`
+group). Firefox and Safari have no Web Serial.
+
+### Local copy and test builds
+
+Web Serial needs a secure page, which `http://localhost` is:
 
 ```bash
+mkdir -p test-firmware   # optional: builds to offer
+tools/fetch-releases.sh  # optional: the published releases, as on Pages
 python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
-Then open <http://localhost:8000>:
-
-1. Plug in the device and click **Connect**, then pick its port in the
-   browser's list. A device the page was allowed before connects as soon as it
-   is plugged in. **Standard VRX needs external DC power as well as USB.**
-2. The page shows the device and what it runs. Click **Install fpvOS
-   <release>**: the page downloads the image published for that device, checks
-   it, and asks once before flashing.
-
-The images come from the newest [fpvOS release](https://github.com/gehee/fpvOS/releases):
-the Pages deploy downloads them and publishes them in `firmware/` with
-`firmware/catalog.json` (`tools/make-catalog.mjs`), because a browser cannot
-download release files from GitHub's asset host. Only devices whose install
-is proven on hardware are listed there (the Ascent Lite / Lite+ for now): a
-VRX or P1 `.fwu` stays a file of your own or a test build. A device with no
-image there shows no Install button.
-
-To flash a file of your own, open **More options** and drop a firmware image,
-read the checks it shows, and click **Flash this file**. An archive holding one
-works too, so the vendor's `.zip` download can be dropped as it is. The page
-selects the connected hardware's image. See [Archives](#archives) for the
-formats. `?dev` on the page's address adds the developer options (USB network
-mode).
-
-For a standard VRX downgrade from a file, **Unlock before flashing (allow older firmware)**
-is selected automatically when the validated image version is below the
-version reported on connection. Equal/newer images leave it off. You can
-override the checkbox for the current selection, then click **Unlock and flash**.
-The unlock temporarily overlays the updater's current version with 0.0.0 in
-RAM; firmware bytes and signature checks stay unchanged. See
-[VRX preparation](docs/architecture.md#vrx-preparation) for eligibility and recovery.
-
-To use the page from another computer on the LAN, either open it through an
-ssh tunnel to `localhost`, or enable "Insecure origins treated as secure" for
-its address in `chrome://flags`.
-
-### Test builds
-
-Served from the computer that builds fpvOS, the page also offers the images in
-`test-firmware/` next to `index.html`: its files and those of the folders in
-it, listed through the server's directory listing, show up in the firmware
-list as **test build**: every `.img`, `.fwu`, `.zip`, `.xz`, `.gz`, `.tgz` and
-`.tar` there, whichever unit is connected, tested on hardware or not. Picking
-one fetches it and shows every check of a local file (they say whether the
-connected unit can take it), then **Flash this file**. The folder is read again
-on **Connect**, when the firmware list opens and when the page comes back to
-the front, so a build copied in while the page is open shows up without a
-reload. `test-firmware` is ignored by git, so the published site never has one.
-
-```bash
-mkdir -p test-firmware   # or a link to the build output
-tools/fetch-releases.sh  # the published releases too, in firmware/ as on Pages
-python3 -m http.server 8000 --bind 127.0.0.1
-```
-
-From another computer, open it through an ssh tunnel, so the page is on
-`http://localhost` (Web Serial needs that or https), then open
-<http://localhost:8000>:
+Every image or archive in `test-firmware/` (git-ignored) shows up as a **test
+build**, re-read on Connect and when the page comes back to the front. From
+another computer, tunnel the port so the page stays on localhost:
 
 ```bash
 ssh -N -L 8000:localhost:8000 user@build-host
 ```
 
-Close the vendor's PC tool and any serial terminal first, because only one
-program can open the port. On Linux, your user needs access to
-`/dev/ttyACM*` (the `dialout` group).
+## What the page checks
 
-## Archives
+- Archives: `.zip` (zip64 too), `.xz`, `.gz`, `.tar` and any nesting; their
+  integrity checks are verified. From an archive it picks the connected unit's
+  image, the newest if there are several.
+- Air images: board, payload CRC-32, sizes and partition bounds.
+- Standard VRX stock images: layout, SHA-256 and the pinned VRX RSA key.
+- fpvOS bundles: board, the bundle header and its SHA-256, checked again after
+  reboot.
+- Transfers: whole-file MD5 and an acknowledgment for every chunk; the unit's
+  identity before upload and after reboot.
+- After a flash, an fpvOS goggle gets this computer's time zone and country if
+  its time zone is not set.
 
-The page takes an image as is, or an archive holding one:
+Cancel stops the transfer only before the install starts. Updates are not
+atomic A/B swaps: keep power connected.
 
-- `.zip`, stored or deflate, with zip64. The vendor's download is a zip of
-  this kind.
-- `.xz` and `.gz`.
-- `.tar`, alone or inside `.gz` or `.xz`.
-- Any nesting of these, for example an `.img.xz` inside a zip.
+## Development
 
-From a zip, only the chosen entry is read, so a 400 MB download costs the size
-of one image. The page selects by the connected hardware:
-`Ascent_H_Sky_<version>.img` for Lite/Lite+, `Ascent_G_Gnd_<version>.img` for
-standard VRX. If there are several matching versions, it takes the newest and
-says so. A mixed-hardware archive with no device connected asks you to connect
-one instead of guessing. If there are no images, it lists what the archive holds.
-
-zip and gzip use the browser's decompressor. `xz.js` handles LZMA2 and its
-CRC-32, CRC-64 or SHA-256 check. Archive integrity checks are verified.
-
-## Validation and update behavior
-
-- Air images: ASW board, payload CRC-32, component sizes and partition bounds.
-- Standard VRX images: ASW/OTRA layout, bounded partition/segment tables,
-  authenticated-body SHA-256 and the pinned standard VRX RSA key. The RSA check
-  matches the vendor's digest-tail comparison, not stricter PKCS#1 padding rules.
-- Transfers: canonical filename from the image version, whole-file MD5, and
-  matching acknowledgments for every chunk. Uncertain data writes are not retried.
-- Reboots: update-mode identity is checked before upload; full factory identity
-  and the requested firmware are verified afterward. The page offers port
-  reselection if permission is lost across a reboot.
-
-- Location: once an fpvOS goggle (VRX, SteadyDigital) runs its new firmware,
-  the page gives it this computer's time zone (as a POSIX TZ string, from
-  tzdata 2026e in `zones.js`; `tools/make-zones.py` updates it), the zone's name
-  and its country. The goggle takes the zone only when SYSTEM > Time Zone is
-  NOT SET. It goes only to the goggle, never fails a flash, and air units are
-  not given one.
-
-**FILE_END starts installation.** Cancellation stops the transfer before that
-command; afterward the page continues monitoring and post-reboot verification.
-Negative updater status codes fail immediately.
-
-These devices write both shared and banked partitions, including boot
-components. Updates are not whole-system atomic A/B swaps, and stock firmware
-can replace persistent application/startup modifications. The standard VRX
-updater also enforces its own version and rollback rules.
-
-The **Advanced** section can request USB network (RNDIS) mode. Other vendor-tool
-features, such as frequency configuration and RC modes, are not covered.
-
-## Development and tests
-
-The app is static ES modules with no build step or runtime packages:
-
-| Location | Responsibility |
-| --- | --- |
-| `index.html`, `app.js` | UI and operation state |
-| `devices/` | Hardware identity, image validation and profiles |
-| `flasher.js`, `stages/` | Image preparation, selection planning and sequential flash operations |
-| `transports/` | Ascent protocol and browser/Linux serial adapters |
-| `archive.js`, `xz.js`, `checksum.js`, `firmware.js` | Archive, integrity and version helpers |
-| `test/` | Unit tests, simulated devices, browser checks and explicit hardware tools |
-
-Use Node 22+, Python 3, `xz`, `tar`, and Chrome/Chromium for the full test suite:
+Static ES modules, no build step. Node 22+, Python 3, `xz`, `tar` and
+Chrome/Chromium run the tests:
 
 ```sh
-node --test test/test.mjs test/archive.test.mjs test/profiles.test.mjs test/unlock.test.mjs test/fpvos.test.mjs test/bootstrap.test.mjs test/p1-bootstrap.test.mjs test/location.test.mjs test/hardware-matrix.test.mjs test/steadydigital-prepare.test.mjs test/prepare-support.test.mjs
+node --test test/*.test.mjs test/test.mjs
 python3 tools/package-p1-recovery.py --check
 node test/browser-check.mjs
 ```
 
-`CHROME` selects a browser executable when `google-chrome` is not on `PATH`.
-The browser check uses a synthetic air image by default and saves screenshots
-to a temporary directory. It accepts optional `[IMG] [OUTDIR]` arguments.
-Tests cover archive extraction, image tampering, identity mismatches, lost
-replies, reconnects, cancellation, unlock staging and installation failures.
+`CHROME` picks the browser. Stock-fixture checks are optional: `ASCENT_IMG`,
+`VRX_IMG` (stock `Ascent_G_Gnd_17_5_8.img`) and `VENDOR_ZIP`. Hardware tools
+(`test/flash-node.mjs`, `test/hardware-browser.mjs`) are explicit and not in
+CI; keep their output under `.local/`. See [Architecture](docs/architecture.md)
+for the device-module contract.
 
-Optional stock-fixture checks use these environment variables; firmware is not
-bundled with the repository:
+### Deploy
 
-| Variable | Fixture |
-| --- | --- |
-| `ASCENT_IMG` | A stock H_Sky air image |
-| `VRX_IMG` | Stock `Ascent_G_Gnd_17_5_8.img`; also enables signed VRX browser flows |
-| `VENDOR_ZIP` | A vendor ZIP containing an H_Sky image (requires `unzip`) |
-
-Linux hardware access is also available through the CLI:
-
-```sh
-node test/flash-node.mjs info
-node test/flash-node.mjs flash FIRMWARE
-```
-
-`test/hardware-browser.mjs` drives native Web Serial: `--info` queries identity,
-`--info --selection-only` checks image/unlock selection, and `--execute` flashes.
-Supply `--usb-serial`, `--output`, and (for flashing) `--device-serial` and
-`--firmware`. Its local audits include checksums, identity replies and screenshots;
-hardware checks are explicit and are not part of CI.
-
-Keep local firmware fixtures and hardware-test output under `.local/`, which
-is ignored by Git.
-
-`.github/workflows/pages.yml` runs the Node and simulated-browser checks on
-every push to `main` and every pull request. It publishes to GitHub Pages
-(without `test/` or `tools/`) the commit the `live` tag points to, at the root,
-and the commit the `preview` tag points to, at `/preview/`, so `main` can move
-on without changing either page:
-
-```bash
-git tag -f live COMMIT && git push -f origin live
-```
+A push to `main` runs the tests. GitHub Pages publishes the commit the `live`
+tag points to at the root and the `preview` tag at `/preview/` (same origin, so
+the same browser permissions); every deploy rebuilds both.
 
 ```bash
 git tag -f preview COMMIT && git push -f origin preview
 ```
 
-Every deploy rebuilds both, so pushing one tag keeps the other. Deleting the tag
-takes `/preview/` down:
-
 ```bash
-git push origin --delete preview
+git tag -f live COMMIT && git push -f origin live
 ```
 
-The preview shares the live page's origin, so it also shares its Web Serial and
-WebHID permissions and its saved settings.
-
-A commit whose workflow lacks these triggers (an older one, a fork's pull
-request) is published by hand after moving a tag:
-
-```bash
-gh workflow run pages.yml --ref main
-```
-
-`tools/version-site.py` gives each deployed module graph and its recovery assets
-URLs under `releases/<commit>/`, so a new page loads matching scripts even when
-older modules remain in the browser cache.
-
-Firefox and Safari have no Web Serial, so the page does not work in them.
+`git push origin --delete preview` takes the preview down.
 
 ## License
 
