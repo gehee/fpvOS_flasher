@@ -24,19 +24,19 @@ One row per stock version: check your unit's stock version against it. A
 version not listed is not supported (the Ascent Lite's stock updater takes the
 image without a version check, so other Lite versions may work).
 
-| Device | Stock version | Linux | ChromeOS | macOS | Windows | Notes |
-| --- | --- | --- | --- | --- | --- | --- |
-| Ascent Lite | 17.5.3 | ☑️ | ☑️ | ☑️ | ☑️ | |
-| | 18.21.10 | ☑️ | ☑️ | ☑️ | ☑️ | |
-| Ascent Lite+ | 18.21.10 | ☑️ | ☑️ | ☑️ | ☑️ | not yet hardware-tested; keeps its serial number |
-| Ascent VRX | 17.5.3 | ☑️ | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
-| | 17.5.8 | ☑️ | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
-| | 18.21.10 | ☑️ | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
-| BETAFPV P1 Air | 1.0.44 | ✅ | ☑️ | ❌ | ❌ | flashed by gehee (Linux Chromium, 2026-11-03) |
-| | 2.0.5 | ☑️ | ☑️ | ❌ | ❌ | bootloader checked offline only; needs a P1 build with the U-Boot bank-selection fix |
-| | 2.0.6 | ☑️ | ☑️ | ❌ | ❌ | bootloader checked offline only; needs the bank-selection fix |
-| | 2.1.2 | ✅ | ☑️ | ✅ | ✅ | Linux: flashed by mh1412 (PR #2). macOS and Windows: through the fpvOS Recovery app, 2026-11-23; fpvOS went to the bank stock was not running from, stock 2.1.2 kept on the other |
-| Skyzone SteadyDigital | SD10P_V2.0.0B03 | ✅ | ☑️ | ✅ | ✅ | macOS (2026-11-22) and Windows (2026-11-23) through the fpvOS Recovery app: stock → recovery → install, display and video working; fpvOS goes to the bank stock is not running from, stock kept on the other |
+| Device | Stock version | Linux | macOS | Windows | Notes |
+| --- | --- | --- | --- | --- | --- |
+| Ascent Lite | 17.5.3 | ☑️ | ☑️ | ☑️ | |
+| | 18.21.10 | ☑️ | ✅ | ☑️ | macOS: stock → fpvOS 2026.10.beta4-99 (test build), 2026-11-23 |
+| Ascent Lite+ | 18.21.10 | ☑️ | ✅ | ☑️ | macOS: stock → fpvOS 2026.10.beta4-99 (test build), 2026-11-23; keeps its serial number |
+| Ascent VRX | 17.5.3 | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
+| | 17.5.8 | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
+| | 18.21.10 | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
+| BETAFPV P1 Air | 1.0.44 | ✅ | ❌ | ❌ | flashed by gehee (Linux Chromium, 2026-11-03) |
+| | 2.0.5 | ☑️ | ❌ | ❌ | bootloader checked offline only; needs a P1 build with the U-Boot bank-selection fix |
+| | 2.0.6 | ☑️ | ❌ | ❌ | bootloader checked offline only; needs the bank-selection fix |
+| | 2.1.2 | ✅ | ✅ | ✅ | Linux: flashed by mh1412 (PR #2). macOS and Windows: through the fpvOS Recovery app, 2026-11-23; fpvOS went to the bank stock was not running from, stock 2.1.2 kept on the other |
+| Skyzone SteadyDigital | SD10P_V2.0.0B03 | ✅ | ✅ | ✅ | macOS (2026-11-22) and Windows (2026-11-23) through the fpvOS Recovery app: stock → recovery → install, display and video working; fpvOS goes to the bank stock is not running from, stock kept on the other |
 
 A Lite was flashed to fpvOS beta3 on hardware (2026-10-08), but its stock
 version and host OS were not recorded.
@@ -52,12 +52,12 @@ itself. The app only uses the unit's memory; the page then installs as usual.
 
 ### fpvOS → fpvOS (updates)
 
-| Device | How | Linux | ChromeOS | macOS | Windows | Notes |
-| --- | --- | --- | --- | --- | --- | --- |
-| Ascent Lite / Lite+ | fpvOS `.img` through the unit's updater | ☑️ | ☑️ | ☑️ | ☑️ | host OS not recorded |
-| Ascent VRX | `.fwu` through fpvOS recovery | ☑️ | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
-| BETAFPV P1 Air | `.fwu` through fpvOS recovery | ☑️ | ☑️ | ☑️ | ☑️ | the 2026-11-03 install ran this step on Linux; no later update recorded |
-| Skyzone SteadyDigital | `.fwu` through fpvOS recovery | ☑️ | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
+| Device | How | Linux | macOS | Windows | Notes |
+| --- | --- | --- | --- | --- | --- |
+| Ascent Lite / Lite+ | fpvOS `.img` through the unit's updater | ☑️ | ☑️ | ☑️ | host OS not recorded |
+| Ascent VRX | `.fwu` through fpvOS recovery | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
+| BETAFPV P1 Air | `.fwu` through fpvOS recovery | ☑️ | ☑️ | ☑️ | the 2026-11-03 install ran this step on Linux; no later update recorded |
+| Skyzone SteadyDigital | `.fwu` through fpvOS recovery | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
 
 Stock → stock (Ascent signed upgrades, the unlocked VRX downgrade to 17.5.8)
 works on any OS and was hardware-tested; host OS not recorded.
