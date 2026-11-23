@@ -9,7 +9,7 @@ import {
 } from './devices/index.js';
 import { prepareFirmware, evaluateSelection, flashFirmware, installResult } from './flasher.js';
 import { formatBytes } from './devices/common.js';
-import { browserPrepareSupport } from './prepare-support.js';
+import { browserPrepareSupport, recoveryAppDownload, recoveryAppUrl } from './prepare-support.js';
 
 const isOurs = (port) => !!profileForUsb(port.getInfo());
 const hex4 = (n) => (n ?? 0).toString(16).padStart(4, '0');
@@ -28,6 +28,7 @@ const state = {
   prepAssets: null,  // the recovery set being fetched for step 2 (a promise)
   prepProfile: null, // the stock board being prepared (its profile's preparation block)
   p1Stage: null,     // stock P1 preparation: null | 'restart' (step 1 next) | 'recovery' (step 2 next) | 'done'
+  recoveryApp: null, // macOS/Windows: the recovery-app download to offer, or null
   connecting: false,
   image: null,       // { file, bytes, parsed, md5 }
   operation: null,
@@ -81,6 +82,7 @@ async function connect() {
   // A stock unit that must be prepared first (a P1 or SteadyDigital on its
   // Sirius port) is not yet an fpvOS device, so it cannot just be opened: hand
   // it to preparation, which works from the profile the port belongs to.
+  state.recoveryApp = null;
   const stock = isOurs(port) ? null : preparationForUsb(port.getInfo());
   if (stock) { await beginPreparation(port, stock); return; }
   await openPort(port);
@@ -211,6 +213,24 @@ function showPreparationUi(profile) {
   $('p1-enter-bootloader').textContent = ui.restart;
   $('p1-load-recovery').textContent = ui.load;
 }
+
+// macOS/Windows hand-off: show the recovery-app panel with the OS-specific
+// download and the steps to run it, then come back and Connect to the recovery
+// serial. The native app does the bootloader work the browser can't.
+function showRecoveryAppUi(profile, dl) {
+  const { ui } = profile.meta.preparation;
+  state.prepProfile = profile;
+  state.p1Stage = null;
+  state.recoveryApp = dl;
+  $('recovery-summary').textContent = `Prepare your ${ui.name} with the recovery app`;
+  $('recovery-os').textContent = dl.os;
+  $('recovery-os-note').textContent = dl.note;
+  $('recovery-first-run').textContent = dl.firstRun;
+  $('recovery-download').textContent = dl.label;
+  $('recovery-download').onclick = () => { window.location.href = recoveryAppUrl(dl.file); };
+  $('recovery-app').open = true;
+  render();
+}
 async function beginPreparation(port, profile) {
   if (state.busy || state.connecting || state.link) return;
   const { ui } = profile.meta.preparation;
@@ -218,8 +238,16 @@ async function beginPreparation(port, profile) {
   // On macOS/Windows, explain why rather than dropping the user into a flow that
   // cannot talk to the bootloader; keep a deliberate opt-out for edge cases.
   const osSupport = browserPrepareSupport(navigator.userAgent);
-  if (!osSupport.supported
-    && !await ask('Use Linux or ChromeOS for this step', osSupport.message, 'Try anyway')) return;
+  if (!osSupport.supported) {
+    // macOS/Windows: the browser can't drive the bootloader. Offer the native
+    // recovery app, which boots the unit into fpvOS recovery mode; the user
+    // then returns here and Connects to the recovery serial to install.
+    const dl = recoveryAppDownload(navigator.userAgent);
+    if (dl) { showRecoveryAppUi(profile, dl); return; }
+    // No build for this OS (e.g. Android): explain the Linux/ChromeOS path.
+    await ask('Use Linux or ChromeOS for this step', osSupport.message);
+    return;
+  }
   const ok = await ask(ui.title, ui.ask, 'Prepare');
   if (!ok) return;
   showPreparationUi(profile);
@@ -713,6 +741,7 @@ function render() {
   $('netmode').disabled = !state.session || !state.profile?.transport.protocol.networkMode || state.busy || state.connecting;
   const p1Available = supported && 'hid' in navigator;
   $('p1-preparation').hidden = state.p1Stage == null;
+  $('recovery-app').hidden = state.recoveryApp == null;
   $('p1-browser-support').hidden = p1Available;
   $('p1-stock-confirm').disabled = state.busy;
   // Walk the two steps: exactly one is the lit, clickable action; the finished

@@ -36,7 +36,7 @@ image without a version check, so other Lite versions may work).
 | | 2.0.5 | ☑️ | ☑️ | ❌ | ❌ | bootloader checked offline only; needs a P1 build with the U-Boot bank-selection fix |
 | | 2.0.6 | ☑️ | ☑️ | ❌ | ❌ | bootloader checked offline only; needs the bank-selection fix |
 | | 2.1.2 | ✅ | ☑️ | ❌ | ❌ | flashed by mh1412 (PR #2); needs the bank-selection fix |
-| Skyzone SteadyDigital | SD10P_V2.0.0B03 | ✅ | ☑️ | ❌ | ❌ | stock → recovery boot verified on Linux 2026-11-19; the install into bank B (stock kept in bank A) not yet re-tested |
+| Skyzone SteadyDigital | SD10P_V2.0.0B03 | ✅ | ☑️ | ❌ | ❌ | stock → recovery → install verified on macOS 2026-11-22 (installed to bank B, stock kept in bank A, display and video working); installs now go to whichever bank does not hold stock |
 
 A Lite was flashed to fpvOS beta3 on hardware (2026-10-08), but its stock
 version and host OS were not recorded. The P1 Air's rebuilt recovery needs a

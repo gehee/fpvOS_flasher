@@ -20,14 +20,15 @@ Standard P1 Air only: not P1 AIO, Matrix, goggles or Ascent hardware.
    now called USB download gadget. Already in this mode? Start at this step.
 5. When recovery starts, click Connect and select the P1 Air serial port. Choose a
    valid fpvos-p1-air.fwu file and click Flash. Stock 2.x requires a firmware
-   build including the source patch below, not an older P1 bundle. Keep power connected until
+   build from the source commit below or later, not an older P1 bundle. Keep power connected until
    installation and the reboot verification finish.
 
 These are different USB identities of ONE physical P1. Browser permissions are
 separate for its stock serial port, bootloader HID and fpvOS recovery serial port.
 No SSH, USB networking, Python program or local preparation helper is needed.
 Preparation only writes RAM. Firmware is installed by the existing P1 updater,
-which preserves stock bank 1, factory calibration and user settings.
+which installs on the bank that does not hold stock and preserves the stock
+bank, factory calibration and user settings.
 
 Linux USB permissions
 ---------------------
@@ -54,13 +55,14 @@ repeatedly flash unverified images. This does not recover damaged SPL/U-Boot.
 Source and assets
 -----------------
 Kernel and DTB: https://github.com/gehee/fpvOS
-Commit: 5c55cfb039d30568a56726d96a917ceb1ed36546
-Source changes: apply browser-v1/source.patch to that commit first.
-The patch SHA-256 and size are recorded in manifest.json. It permits either
-valid environment/U-Boot bank selection without changing those selections.
-Build: ./build.sh p1-air-source
-Files: output/p1-air-source/images/kernel.img and betafpv-p1-air.dtb
-The kernel embeds the independent fpvos-recovery root and P1 updater.
+Commit: f57977d2e94ea24fa2e3510e9485ecb8b39b56d7 (manifest.json source_commit), unmodified.
+Build: ./build.sh p1-air-source && ./build.sh p1-air-source recovery
+Files: output/p1-air-source/images/kernel-recovery.img (shipped here as
+kernel.img) and betafpv-p1-air.dtb
+The kernel is the slim upload recovery kernel (no camera, encoder or input;
+see board/p1-air/linux-recovery.fragment). It embeds the independent
+fpvos-recovery root and the P1 updater, which installs fpvOS on whichever
+bank stock is not running from.
 
 browser-v1/manifest.json pins exact sizes, SHA-256 hashes, RAM destinations and
 supported bootloader fingerprints. The flasher pins the manifest hash too.

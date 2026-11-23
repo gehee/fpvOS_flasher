@@ -342,6 +342,21 @@
         afterwards you can update from any OS. Linux may need USB/HID permissions:
         <a href="assets/p1-updater/README.txt" target="_blank" rel="noopener">setup and recovery guide</a>.</p>
     </details>
+    <!-- macOS/Windows: the browser can't drive the stock bootloader, so hand off to the native recovery app. -->
+    <details id="recovery-app" hidden>
+      <summary id="recovery-summary">Prepare with the recovery app</summary>
+      <p>Your browser can't drive the stock bootloader on <span id="recovery-os">this computer</span>, so a small
+        <strong>fpvOS Recovery</strong> app does this one-time step. It runs in RAM only &mdash; a power cycle restores stock.</p>
+      <p><button id="recovery-download" class="solid big">Download the recovery app</button></p>
+      <ol class="tips">
+        <li>Open the app and press <b>Start</b>. <span id="recovery-os-note"></span></li>
+        <li>Wait until it says the unit is in <b>fpvOS recovery mode</b>.</li>
+        <li>Come back here, press <b>Connect</b>, and choose the unit's recovery serial port to install fpvOS.</li>
+      </ol>
+      <p class="note" id="recovery-first-run"></p>
+      <p class="note">Keep the unit plugged in throughout. The app and its guide:
+        <a id="recovery-guide" href="https://github.com/gehee/fpvOS_recovery/releases/latest" target="_blank" rel="noopener">fpvOS Recovery releases</a>.</p>
+    </details>
     <details id="help">
       <summary>My device isn't found</summary>
       <ul class="tips">

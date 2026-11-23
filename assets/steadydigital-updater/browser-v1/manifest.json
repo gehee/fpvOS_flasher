@@ -11,8 +11,8 @@
   ],
   "files": {
     "kernel.img": {
-      "size": 5744384,
-      "sha256": "7df2b9147930558ac092ae7ab8aaa41669b2f8f60d3f6f76eb122ad5b9c51117",
+      "size": 4323072,
+      "sha256": "d27aa43cf3f981dc8b064db1a2226172615decb8d1d126b549ffacb43005a445",
       "address": 608174080
     },
     "skyzone-steadydigital.dtb": {

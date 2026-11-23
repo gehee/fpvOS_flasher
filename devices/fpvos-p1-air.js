@@ -44,7 +44,7 @@ export const FPVOS_P1_AIR = defineDevice({
     image: { pattern: /\.fwu$/i, detect: (b) => bundleForBoard(b, 1345409867), parse: parseP1Bundle,
       columns: ['Component', 'Size', 'Offset', 'Update flag'],
       checks: (p) => [['Bundle SHA-256', p.sha256 ?? ''], ['Operation', 'Install fpvOS']] },
-    notices: { flash: 'Keep external power connected throughout the update. Requires the P1 fpvOS updater or clean recovery; prepare supported stock firmware using the browser controls in the Device panel first. The device checks the supported standard P1_SKY NAND layout and preserves stock bank 1, factory calibration and user settings. Unsigned development firmware; keep a verified backup and recovery access.' },
+    notices: { flash: 'Keep external power connected throughout the update. Requires the P1 fpvOS updater or clean recovery; prepare supported stock firmware using the browser controls in the Device panel first. The device checks the supported standard P1_SKY NAND layout and installs on the bank that does not hold stock (whichever bank a stock update left it on), so a power cut still boots stock; factory calibration and user settings are preserved. Unsigned development firmware; keep a verified backup and recovery access.' },
   },
   transport: Object.freeze({ ...ASCENT_TRANSPORT, strictReplies: true,
     protocol: Object.freeze({ createSession: ASCENT_PROTOCOL.createSession, deviceMode: ASCENT_PROTOCOL.deviceMode }),

@@ -163,10 +163,10 @@ and the fixed RAM boot command. All three images need successful device CRCs
 before boot. The pinned recovery kernel includes its own root; a small external
 initramfs overrides `/init` to force recovery even if an older fpvOS root exists.
 `tools/package-p1-recovery.py --check` verifies this deterministic override against
-its supplied source. NAND installation policy remains in the updater. The bundled source patch
-allows either valid environment/U-Boot bank selection and preserves those
-selections; exactly one member of each pair must be active. Firmware bank 1,
-factory calibration and user settings remain protected.
+its supplied source. NAND installation policy remains in the updater: it installs fpvOS on whichever
+bank stock is not running from and never writes the booted stock bank; exactly
+one member of each environment/U-Boot pair must be active. Factory calibration
+and user settings remain protected.
 Cancellation, transfer errors and failed verification never trigger boot/flash;
 retry preparation or power-cycle the unit. Linux HID permissions can be needed.
 Windows/macOS HID behavior is not yet qualified.

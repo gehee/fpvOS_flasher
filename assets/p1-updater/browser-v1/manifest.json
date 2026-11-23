@@ -4,7 +4,7 @@
   "board": "p1-air",
   "board_id": 1345409867,
   "source": "https://github.com/gehee/fpvOS",
-  "source_commit": "5c55cfb039d30568a56726d96a917ceb1ed36546",
+  "source_commit": "f57977d2e94ea24fa2e3510e9485ecb8b39b56d7",
   "build_config": "p1air_source_defconfig",
   "supported_stock_firmware": [
     "1.0.44.rel",
@@ -14,13 +14,13 @@
   ],
   "files": {
     "kernel.img": {
-      "size": 5294848,
-      "sha256": "13418cfd0b508fef3abdbd68539c6e452d162a0531935ffe2cc1067c31ef2445",
+      "size": 4188416,
+      "sha256": "a1bb626b045f799874f6bb98ba99755ae722c15cb3d2fc5c0a45d739bc2994c9",
       "address": 608174080
     },
     "betafpv-p1-air.dtb": {
-      "size": 8940,
-      "sha256": "e701af012e2b6d6481359abed266413ac39ac5df04e5b6d3f192c5320814109c",
+      "size": 10301,
+      "sha256": "03b4b724a4331886ec5b7e15d472104b0763d4af7b6db9ef88be5605f7e3574c",
       "address": 570949632
     },
     "recovery-initrd.img": {
@@ -78,10 +78,5 @@
         }
       ]
     }
-  },
-  "source_patch": {
-    "file": "source.patch",
-    "sha256": "1be4b719a46563d0abdf9b5fabfd50340c05362d1e26c71f055c9fe293908919",
-    "size": 4084
   }
 }

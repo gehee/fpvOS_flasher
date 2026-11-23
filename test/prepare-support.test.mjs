@@ -3,7 +3,7 @@
 // that names the OS and points at Linux/ChromeOS.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { browserPrepareSupport } from '../prepare-support.js';
+import { browserPrepareSupport, recoveryAppDownload, recoveryAppUrl } from '../prepare-support.js';
 
 const UA = {
   linux: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36',
@@ -43,5 +43,53 @@ test('an empty or unknown user-agent is unsupported and never throws', () => {
     const r = browserPrepareSupport(ua);
     assert.equal(r.supported, false);
     assert.ok(r.message.includes('Linux or ChromeOS'));
+  }
+});
+
+// The macOS/Windows hand-off: where the browser can't prepare, the page offers
+// the native recovery app instead. These pin which OSes get a download and that
+// each names the release asset the recovery-app workflow publishes.
+test('recoveryAppDownload offers the native app on macOS and Windows', () => {
+  const mac = recoveryAppDownload(UA.mac);
+  assert.equal(mac.os, 'macOS');
+  assert.equal(mac.file, 'fpvOS-Recovery-macOS.zip');
+  assert.match(mac.label, /macOS/);
+  assert.ok(mac.note);
+  const win = recoveryAppDownload(UA.windows);
+  assert.equal(win.os, 'Windows');
+  assert.equal(win.file, 'fpvOS-Recovery-Windows.zip');
+  assert.match(win.label, /Windows/);
+  assert.ok(win.note);
+});
+
+test('first-launch guidance names what each OS actually shows', () => {
+  const mac = recoveryAppDownload(UA.mac);
+  // macOS 15+: right-click Open no longer bypasses Gatekeeper; Settings does.
+  assert.match(mac.firstRun, /Privacy & Security/);
+  assert.match(mac.firstRun, /Open Anyway/);
+  assert.match(mac.firstRun, /Trash/);
+  assert.doesNotMatch(mac.firstRun, /right-click/i);
+  assert.match(mac.note, /password once/);
+  assert.match(recoveryAppDownload(UA.windows).firstRun, /More info.*Run anyway/);
+});
+
+test('recoveryAppDownload is null where the browser path works or has no build', () => {
+  for (const key of ['linux', 'chromeos', 'android']) {
+    assert.equal(recoveryAppDownload(UA[key]), null, key);
+  }
+  for (const ua of ['', undefined, 'something weird']) {
+    assert.equal(recoveryAppDownload(ua), null);
+  }
+});
+
+test('recoveryAppUrl builds a latest-release asset URL from a file name', () => {
+  assert.equal(
+    recoveryAppUrl('fpvOS-Recovery-macOS.zip'),
+    'https://github.com/gehee/fpvOS_recovery/releases/latest/download/fpvOS-Recovery-macOS.zip',
+  );
+  // Every offered download names a file the URL builder can resolve.
+  for (const key of ['mac', 'windows']) {
+    const dl = recoveryAppDownload(UA[key]);
+    assert.ok(recoveryAppUrl(dl.file).endsWith(`/download/${dl.file}`), key);
   }
 });

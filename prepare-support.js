@@ -23,3 +23,49 @@ export function browserPrepareSupport(userAgent = '') {
       + `Run it once from a Linux or ChromeOS machine (a live USB stick is enough) — after that, you can install updates from ${os} over USB like normal.`,
   };
 }
+
+// On macOS/Windows the browser can't drive the stock bootloader, but the native
+// "fpvOS Recovery" app can. Pick the download for the user's OS, or null where
+// the browser path already works (Linux/ChromeOS) or there is no build (other).
+// The apps live in their own repo, fpvOS_recovery, whose recovery-app workflow
+// publishes them as release assets; the file names below must match that
+// workflow's output. See RELEASING.md there.
+// Served from localhost (e.g. local testing over an SSH tunnel), take the apps
+// from ./recovery-app/ beside the page instead, so the download works without a
+// published release.
+const RECOVERY_APP_BASE =
+  (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1|::1)$/.test(location.hostname))
+    ? 'recovery-app'
+    : 'https://github.com/gehee/fpvOS_recovery/releases/latest/download';
+
+export function recoveryAppUrl(file) {
+  return `${RECOVERY_APP_BASE}/${file}`;
+}
+
+// note: what happens when Start is pressed. firstRun: getting an app that is
+// not signed by a known developer to open the first time. Since macOS 15 a
+// right-click Open no longer bypasses Gatekeeper; only System Settings does.
+export function recoveryAppDownload(userAgent = '') {
+  const ua = String(userAgent);
+  if (/\bMac OS X\b|\bMacintosh\b/.test(ua)) {
+    return {
+      os: 'macOS',
+      label: 'Download for macOS',
+      file: 'fpvOS-Recovery-macOS.zip',
+      note: 'macOS then asks for your password once: only an administrator can take the USB device from the system.',
+      firstRun: 'The first time, macOS may say it cannot verify the app and offer to move it to the Trash. Choose Done, '
+        + 'open System Settings › Privacy & Security, scroll down to Security, click Open Anyway next to fpvOS Recovery '
+        + 'and enter your password, then open the app again. Later launches open directly.',
+    };
+  }
+  if (/\bWindows\b/.test(ua)) {
+    return {
+      os: 'Windows',
+      label: 'Download for Windows',
+      file: 'fpvOS-Recovery-Windows.zip',
+      note: 'The first time, Windows asks once to let it install the USB driver for the bootloader: choose Yes.',
+      firstRun: 'The first time, Windows SmartScreen may say it protected your PC. Choose More info, then Run anyway.',
+    };
+  }
+  return null;
+}

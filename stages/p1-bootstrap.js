@@ -2,9 +2,9 @@
 import { P1HidRecovery, P1_RAM_FILES, STEADYDIGITAL_RAM_FILES, p1Bootloader, sha256 } from '../transports/p1-hid.js';
 export { enterP1Bootloader, enterSteadyDigitalBootloader, P1_STOCK_USB, STEADYDIGITAL_STOCK_USB, P1_HID_FILTER, P1_STOCK_VERSIONS } from '../transports/p1-hid.js';
 export const P1_RECOVERY_BASE = new URL('../assets/p1-updater/browser-v1/', import.meta.url);
-export const P1_RECOVERY_MANIFEST_SHA256 = '3bc35e4d9851218a37c682a80c5033c607574aefea6e8deb1c9f3ca0ff0a3fbe';
+export const P1_RECOVERY_MANIFEST_SHA256 = '803da31a63e6bc34d1b4054c10dbfdf5965f190c5ed702c85cb7fe0d8a09a258';
 export const STEADYDIGITAL_RECOVERY_BASE = new URL('../assets/steadydigital-updater/browser-v1/', import.meta.url);
-export const STEADYDIGITAL_RECOVERY_MANIFEST_SHA256 = '692d001d55d7bab03f43332e8a5eaed944ece87e38710d99470047fc40ad1584';
+export const STEADYDIGITAL_RECOVERY_MANIFEST_SHA256 = '08fd97e3c51b65a894d4852d206eb0f1a15c2d6cbf2d01269fea169483c25516';
 async function fetchBytes(name, limit, fetcher, signal, base = P1_RECOVERY_BASE) {
   const response = await fetcher(new URL(name, base), { signal, cache: 'no-store' });
   if (!response.ok) throw new Error(`Cannot load P1 recovery ${name}: HTTP ${response.status}.`);

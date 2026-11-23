@@ -3,10 +3,11 @@
 // and service as the Ascent VRX profile; the board reports hardware
 // "SteadyDigital" and serial "fpvos-steadydigital" to FIND_DEVICE.
 //
-// A full fpvOS .fwu (board 21316) installs into bank B (slot 1:
-// kernel1/dtb1/userapp1) and selects stock bank A while writing, so a power
-// cut still boots stock. Factory calibration, the environment, U-Boot and
-// bank A are never written.
+// A full fpvOS .fwu (board 21316) installs on the bank that does not hold
+// stock (the bank already holding fpvOS, else the one not booted) and keeps
+// the stock bank selected while writing, so a power cut still boots stock.
+// Factory calibration, the environment, U-Boot and the stock bank are never
+// written.
 //
 // A stock unit enumerates as an Artosyn Sirius composite gadget (1d6b:0210), not
 // on this service. Connect recognises that port and prepares the unit from the
@@ -23,7 +24,7 @@ import { parseFpvosBundle as parseBundle, bundleForBoard } from './fpvos-bundle.
 export const parseFpvosBundle = (bytes) => parseBundle(bytes, {
   board: 21316, boardName: 'fpvOS SteadyDigital', maxSize: 33554432,
   // fpvOS's backends/skyzone-steadydigital/profile.json: the root is the
-  // squashfs the unit mounts from flash (UBI in bank B), up to 24 MiB.
+  // squashfs the unit mounts from flash (UBI in the installed bank), up to 24 MiB.
   names: ['kernel.img', 'skyzone-steadydigital.dtb', 'rootfs.squashfs'],
   limits: [6291456, 65536, 25165824],
 });
@@ -53,8 +54,8 @@ export const FPVOS_STEADYDIGITAL = defineDevice({
     identity: { matches: matchesFpvosSteadyDigital, normalMatches: (a, b) => matchesFpvosSteadyDigital(a) && matchesFpvosSteadyDigital(b) },
     image: { pattern: /\.fwu$/i, detect: (b) => bundleForBoard(b, 21316), parse: parseFpvosBundle,
       columns: ['Component', 'Size', 'Offset', 'Update flag'],
-      checks: (p) => [['Bundle SHA-256', p.sha256 ?? ''], ['Operation', 'Install fpvOS (bank B; stock kept in bank A)']] },
-    notices: { flash: 'A stock unit is prepared from this page first (Connect, then the two steps in the Device panel); an fpvOS or clean-recovery unit installs directly. Keep external power connected throughout. The install writes bank B (kernel1/dtb1/userapp1) and selects stock bank A while writing, so a power cut still boots stock; factory calibration, the environment, U-Boot and bank A are never written. Settings and pairing in usr_data are preserved. Unsigned development firmware; keep a verified backup and a working U-Boot RAM recovery path.' },
+      checks: (p) => [['Bundle SHA-256', p.sha256 ?? ''], ['Operation', 'Install fpvOS (on the bank not holding stock; stock kept)']] },
+    notices: { flash: 'A stock unit is prepared from this page first (Connect, then the two steps in the Device panel); an fpvOS or clean-recovery unit installs directly. Keep external power connected throughout. The install writes the bank that does not hold stock (whichever bank a stock update left it on) and keeps the stock bank selected while writing, so a power cut still boots stock; factory calibration, the environment, U-Boot and the stock bank are never written. Settings and pairing in usr_data are preserved. Unsigned development firmware; keep a verified backup and a working U-Boot RAM recovery path.' },
   },
   transport: Object.freeze({ ...ASCENT_TRANSPORT, strictReplies: true,
     protocol: Object.freeze({ createSession: ASCENT_PROTOCOL.createSession, deviceMode: ASCENT_PROTOCOL.deviceMode }),

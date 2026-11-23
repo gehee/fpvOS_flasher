@@ -203,12 +203,12 @@ test('a failed version-specific probe does not try another bootloader layout', a
   } finally { await link.close(); }
 });
 
-test('bundled recovery includes its hash-pinned corresponding source patch', async () => {
+test('bundled recovery names its exact, unpatched corresponding source commit', async () => {
   const { manifest } = await loadP1Recovery({ fetcher: fetchAssets });
-  const patch = new Uint8Array(await (await fetchAssets(new URL(manifest.source_patch.file, 'https://localhost/'))).arrayBuffer());
-  assert.equal(patch.length, manifest.source_patch.size);
-  assert.equal(await sha256(patch), manifest.source_patch.sha256);
-  assert.match(new TextDecoder().decode(patch), /backends\/p1-air\/layout\.h/);
+  assert.match(manifest.source_commit, /^[0-9a-f]{40}$/);
+  assert.equal(manifest.source_patch, undefined);
+  const readme = await fs.readFile(new URL('../assets/p1-updater/README.txt', import.meta.url), 'utf8');
+  assert.ok(readme.includes(`Commit: ${manifest.source_commit}`));
 });
 
 // A host that needs more than one probe, or a fresh HID handle, still reaches the
