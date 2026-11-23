@@ -42,20 +42,39 @@ export function recoveryAppUrl(file) {
   return `${RECOVERY_APP_BASE}/${file}`;
 }
 
+// The same, absolute (a command run in Terminal has no page to resolve against).
+function absoluteRecoveryAppUrl(file) {
+  const url = recoveryAppUrl(file);
+  return typeof location !== 'undefined' ? new URL(url, location.href).href : url;
+}
+
+// macOS: a Terminal command that fetches the app with curl and opens it from a
+// fresh temporary folder. Files curl downloads carry no quarantine flag, so
+// Gatekeeper never stops the (not notarized) app: no "move to Trash" dialog,
+// no trip to Privacy & Security. Nothing is installed, and no sudo: the app
+// asks for the password itself. "fpvOS Recovery.app" is the zip's top level
+// (the recovery-app workflow zips it with ditto --keepParent).
+export function recoveryTerminalCommand(url) {
+  return `D=$(mktemp -d) && curl -fsSL '${url}' -o "$D/app.zip" && ditto -xk "$D/app.zip" "$D" && open "$D/fpvOS Recovery.app"`;
+}
+
 // note: what happens when Start is pressed. firstRun: getting an app that is
 // not signed by a known developer to open the first time. Since macOS 15 a
-// right-click Open no longer bypasses Gatekeeper; only System Settings does.
+// right-click Open no longer bypasses Gatekeeper; only System Settings does,
+// which the Terminal command avoids altogether.
 export function recoveryAppDownload(userAgent = '') {
   const ua = String(userAgent);
   if (/\bMac OS X\b|\bMacintosh\b/.test(ua)) {
+    const file = 'fpvOS-Recovery-macOS.zip';
     return {
       os: 'macOS',
-      label: 'Download for macOS',
-      file: 'fpvOS-Recovery-macOS.zip',
+      label: 'Download the app instead',
+      file,
+      terminal: recoveryTerminalCommand(absoluteRecoveryAppUrl(file)),
       note: 'macOS then asks for your password once: only an administrator can take the USB device from the system.',
-      firstRun: 'The first time, macOS may say it cannot verify the app and offer to move it to the Trash. Choose Done, '
-        + 'open System Settings › Privacy & Security, scroll down to Security, click Open Anyway next to fpvOS Recovery '
-        + 'and enter your password, then open the app again. Later launches open directly.',
+      firstRun: 'If you download the app instead, macOS may say the first time that it cannot verify it and offer to '
+        + 'move it to the Trash. Choose Done, open System Settings › Privacy & Security, scroll down to Security, '
+        + 'click Open Anyway next to fpvOS Recovery and enter your password, then open the app again.',
     };
   }
   if (/\bWindows\b/.test(ua)) {

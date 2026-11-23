@@ -264,6 +264,14 @@
     color: color-mix(in srgb, var(--error) 70%, var(--text));
   }
   code { font-family: var(--mono); font-size: 0.88em; background: var(--sunk); padding: 1px 5px; border-radius: 4px; color: var(--text); }
+  /* A command to paste into a terminal, with its Copy button. */
+  .command { display: flex; align-items: flex-start; gap: 10px; margin: 4px 0 12px; padding: 12px 12px 12px 14px;
+    background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; }
+  .command code { flex: 1; min-width: 0; padding: 0; background: none; font-size: 12.5px; line-height: 1.55;
+    white-space: pre-wrap; word-break: break-all; user-select: all; }
+  .command button { flex: none; padding: 7px 14px; }
+  /* Beside the Terminal command, the download is still a lime action, one size down. */
+  #recovery-download.quiet-alt { padding: 9px 16px; font-size: 13px; }
 
   footer { margin-top: 22px; color: var(--quiet); font-size: 13px; text-align: center; }
   main a { color: var(--accent); }
@@ -347,9 +355,17 @@
       <summary id="recovery-summary">Prepare with the recovery app</summary>
       <p>Your browser can't drive the stock bootloader on <span id="recovery-os">this computer</span>, so a small
         <strong>fpvOS Recovery</strong> app does this one-time step. It runs in RAM only &mdash; a power cycle restores stock.</p>
+      <div id="recovery-terminal" hidden>
+        <p>Open <b>Terminal</b> (Applications › Utilities), paste this command and press <b>Return</b>. It downloads
+          the app into a temporary folder and opens it. Nothing is installed.</p>
+        <div class="command">
+          <code id="recovery-command"></code>
+          <button id="recovery-copy" class="solid">Copy</button>
+        </div>
+      </div>
       <p><button id="recovery-download" class="solid big">Download the recovery app</button></p>
       <ol class="tips">
-        <li>Open the app and press <b>Start</b>. <span id="recovery-os-note"></span></li>
+        <li>In the app, press <b>Start recovery</b>. <span id="recovery-os-note"></span></li>
         <li>Wait until it says the unit is in <b>fpvOS recovery mode</b>.</li>
         <li>Come back here, press <b>Connect</b>, and choose the unit's recovery serial port to install fpvOS.</li>
       </ol>

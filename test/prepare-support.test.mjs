@@ -3,7 +3,7 @@
 // that names the OS and points at Linux/ChromeOS.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { browserPrepareSupport, recoveryAppDownload, recoveryAppUrl } from '../prepare-support.js';
+import { browserPrepareSupport, recoveryAppDownload, recoveryAppUrl, recoveryTerminalCommand } from '../prepare-support.js';
 
 const UA = {
   linux: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36',
@@ -53,7 +53,7 @@ test('recoveryAppDownload offers the native app on macOS and Windows', () => {
   const mac = recoveryAppDownload(UA.mac);
   assert.equal(mac.os, 'macOS');
   assert.equal(mac.file, 'fpvOS-Recovery-macOS.zip');
-  assert.match(mac.label, /macOS/);
+  assert.match(mac.label, /Download/);
   assert.ok(mac.note);
   const win = recoveryAppDownload(UA.windows);
   assert.equal(win.os, 'Windows');
@@ -71,6 +71,22 @@ test('first-launch guidance names what each OS actually shows', () => {
   assert.doesNotMatch(mac.firstRun, /right-click/i);
   assert.match(mac.note, /password once/);
   assert.match(recoveryAppDownload(UA.windows).firstRun, /More info.*Run anyway/);
+});
+
+// The macOS main path: a Terminal command. curl-downloaded files carry no
+// quarantine flag, so Gatekeeper never blocks the app (no Trash dialog, no
+// Privacy & Security trip). Verified by hand on macOS 26: the app opens.
+test('macOS gets a Terminal command that fetches the app and opens it', () => {
+  const mac = recoveryAppDownload(UA.mac);
+  assert.equal(mac.terminal, recoveryTerminalCommand(recoveryAppUrl(mac.file)));
+  // A fresh temporary folder, curl (not the browser), ditto, then open the
+  // bundle at the zip's top level - nothing installed, nothing else touched.
+  assert.match(mac.terminal, /^D=\$\(mktemp -d\) && curl -fsSL '/);
+  assert.ok(mac.terminal.includes(`'${recoveryAppUrl(mac.file)}' -o "$D/app.zip"`));
+  assert.match(mac.terminal, /&& ditto -xk "\$D\/app\.zip" "\$D" && open "\$D\/fpvOS Recovery\.app"$/);
+  // No privilege or security-setting changes: the app asks for the password itself.
+  assert.doesNotMatch(mac.terminal, /sudo|xattr|spctl|chmod/);
+  assert.equal(recoveryAppDownload(UA.windows).terminal, undefined);
 });
 
 test('recoveryAppDownload is null where the browser path works or has no build', () => {

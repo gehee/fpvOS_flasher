@@ -228,6 +228,24 @@ function showRecoveryAppUi(profile, dl) {
   $('recovery-first-run').textContent = dl.firstRun;
   $('recovery-download').textContent = dl.label;
   $('recovery-download').onclick = () => { window.location.href = recoveryAppUrl(dl.file); };
+  // macOS: the Terminal command is the main path (no Gatekeeper prompts); the
+  // plain download stays as a quieter alternative.
+  $('recovery-terminal').hidden = !dl.terminal;
+  $('recovery-download').classList.toggle('quiet-alt', Boolean(dl.terminal));
+  if (dl.terminal) {
+    $('recovery-command').textContent = dl.terminal;
+    $('recovery-copy').textContent = 'Copy';
+    $('recovery-copy').onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(dl.terminal);
+        $('recovery-copy').textContent = 'Copied';
+      } catch {
+        // No clipboard permission: select the command so Cmd-C copies it.
+        getSelection().selectAllChildren($('recovery-command'));
+        $('recovery-copy').textContent = 'Press ⌘C';
+      }
+    };
+  }
   $('recovery-app').open = true;
   render();
 }

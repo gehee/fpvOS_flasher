@@ -35,17 +35,20 @@ image without a version check, so other Lite versions may work).
 | BETAFPV P1 Air | 1.0.44 | ✅ | ☑️ | ❌ | ❌ | flashed by gehee (Linux Chromium, 2026-11-03) |
 | | 2.0.5 | ☑️ | ☑️ | ❌ | ❌ | bootloader checked offline only; needs a P1 build with the U-Boot bank-selection fix |
 | | 2.0.6 | ☑️ | ☑️ | ❌ | ❌ | bootloader checked offline only; needs the bank-selection fix |
-| | 2.1.2 | ✅ | ☑️ | ❌ | ❌ | flashed by mh1412 (PR #2); needs the bank-selection fix |
-| Skyzone SteadyDigital | SD10P_V2.0.0B03 | ✅ | ☑️ | ❌ | ❌ | stock → recovery → install verified on macOS 2026-11-22 (installed to bank B, stock kept in bank A, display and video working); installs now go to whichever bank does not hold stock |
+| | 2.1.2 | ✅ | ☑️ | ✅ | ✅ | Linux: flashed by mh1412 (PR #2). macOS and Windows: through the fpvOS Recovery app, 2026-11-23; fpvOS went to the bank stock was not running from, stock 2.1.2 kept on the other |
+| Skyzone SteadyDigital | SD10P_V2.0.0B03 | ✅ | ☑️ | ✅ | ✅ | macOS (2026-11-22) and Windows (2026-11-23) through the fpvOS Recovery app: stock → recovery → install, display and video working; fpvOS goes to the bank stock is not running from, stock kept on the other |
 
 A Lite was flashed to fpvOS beta3 on hardware (2026-10-08), but its stock
-version and host OS were not recorded. The P1 Air's rebuilt recovery needs a
-repeat hardware test.
+version and host OS were not recorded.
 
 The P1 Air and SteadyDigital first install starts with a one-time preparation
 over WebHID that works **only on Linux and ChromeOS**: macOS and Windows cannot
 send the stock bootloader's reports (confirmed on a SteadyDigital, 2026-11-20;
-the P1 has the same loader). The page says so on other OSes.
+the P1 has the same loader). On macOS and Windows the page hands that step to
+the **fpvOS Recovery** app instead (from
+[fpvOS_recovery](https://github.com/gehee/fpvOS_recovery)): on macOS through a
+one-line Terminal command, on Windows as one `.exe` that installs its USB driver
+itself. The app only uses the unit's memory; the page then installs as usual.
 
 ### fpvOS → fpvOS (updates)
 
