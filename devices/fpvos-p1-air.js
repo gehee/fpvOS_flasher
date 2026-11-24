@@ -3,7 +3,7 @@ import { ASCENT_TRANSPORT, ASCENT_PROTOCOL, deviceModeOf } from '../transports/a
 import { defineDevice } from './common.js';
 import { FPVOS_PREPARE, FPVOS_TRANSFER, FPVOS_INSTALL, FPVOS_REBOOT_VERIFY } from '../stages/fpvos.js';
 import { parseFpvosBundle, bundleForBoard } from './fpvos-bundle.js';
-import { enterP1Bootloader, prepareP1Recovery, loadP1Recovery, P1_STOCK_USB, P1_HID_FILTER, P1_STOCK_VERSIONS } from '../stages/p1-bootstrap.js';
+import { enterP1Bootloader, prepareP1Recovery, loadP1Recovery, P1_STOCK_USB, P1_HID_FILTER, P1_STOCK_VERSIONS, P1_AUTO } from '../stages/p1-bootstrap.js';
 
 export const parseP1Bundle = (bytes) => parseFpvosBundle(bytes, {
   board: 1345409867, boardName: 'BETAFPV P1 Air / P1_SKY', maxSize: 16777216,
@@ -35,10 +35,11 @@ export const FPVOS_P1_AIR = defineDevice({
     bridgeKept: false,
     preparation: Object.freeze({ enterBootloader: enterP1Bootloader, loadRecovery: prepareP1Recovery, loadAssets: loadP1Recovery,
       serialFilter: P1_STOCK_USB, hidFilter: P1_HID_FILTER, stockVersions: P1_STOCK_VERSIONS,
-      stockVersion: '1.0.44',   // the version the page asks the user to confirm
+      // found by probing (1.0.44 has the v1 bootloader, 2.x the v2 one), v1 first
+      stockVersion: P1_AUTO,
       ui: Object.freeze({ name: 'BETAFPV P1 Air', title: 'Stock BETAFPV P1 Air',
-        confirm: 'This is a standard P1 Air with stock firmware 1.0.44. Other stock versions and P1 AIO models are not supported.',
-        ask: 'Prepare this unit in the browser and install fpvOS? Supported: a standard P1 Air on stock firmware 1.0.44, kept on external power throughout. Other stock versions and P1 AIO models are not supported. Nothing is written to flash yet; the bootloader is checked first.',
+        confirm: 'This is a standard P1 Air on stock firmware 1.0.44, 2.0.5, 2.0.6 or 2.1.2 (the page detects which). P1 AIO models are not supported.',
+        ask: 'Prepare this unit in the browser and install fpvOS? Supported: a standard P1 Air on stock firmware 1.0.44, 2.0.5, 2.0.6 or 2.1.2, kept on external power throughout; the page detects which from its bootloader. P1 AIO models are not supported. Nothing is written to flash yet; the bootloader is checked first.',
         restart: '1. Restart stock P1', load: '2. Load P1 recovery', serialName: 'P1 Air' }) }),
     identity: { matches: matchesFpvosP1Air, normalMatches: (a, b) => matchesFpvosP1Air(a) && matchesFpvosP1Air(b) },
     image: { pattern: /\.fwu$/i, detect: (b) => bundleForBoard(b, 1345409867), parse: parseP1Bundle,

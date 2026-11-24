@@ -35,7 +35,7 @@ image without a version check, so other Lite versions may work).
 | BETAFPV P1 Air | 1.0.44 | ✅ | ❌ | ❌ | flashed by gehee (Linux Chromium, 2026-11-03) |
 | | 2.0.5 | ☑️ | ❌ | ❌ | bootloader checked offline only; needs a P1 build with the U-Boot bank-selection fix |
 | | 2.0.6 | ☑️ | ❌ | ❌ | bootloader checked offline only; needs the bank-selection fix |
-| | 2.1.2 | ✅ | ✅ | ✅ | Linux: flashed by mh1412 (PR #2). macOS and Windows: through the fpvOS Recovery app, 2026-11-23 (Windows again with app 0.4.1; that time the unit needed a manual restart before the flasher could connect); fpvOS went to the bank stock was not running from, stock 2.1.2 kept on the other |
+| | 2.1.2 | ✅ | ✅ | ✅ | Linux: flashed by mh1412 (PR #2), and again from this page 2026-11-23 (Linux Chromium), its bootloader detected with no version to pick. macOS and Windows: through the fpvOS Recovery app, 2026-11-23 (Windows again with app 0.4.1; that time the unit needed a manual restart before the flasher could connect); fpvOS went to the bank stock was not running from, stock 2.1.2 kept on the other |
 | Skyzone SteadyDigital | SD10P_V2.0.0B03 | ✅ | ✅ | ✅ | macOS (2026-11-22) and Windows (2026-11-23) through the fpvOS Recovery app: stock → recovery → install, display and video working; fpvOS goes to the bank stock is not running from, stock kept on the other |
 
 A Lite was flashed to fpvOS beta3 on hardware (2026-10-08), but its stock
@@ -79,8 +79,8 @@ kernel/DTB back from the unit's original backups. See
 ### BETAFPV P1 Air and Skyzone SteadyDigital
 
 1. On stock, click **Connect** and pick the unit's Sirius port. The page
-   recognises it and offers to prepare it (for the P1, first pick its stock
-   version in the preparation panel).
+   recognises it and offers to prepare it. For the P1 the page finds which
+   bootloader it has, 1.0.44's or 2.x's, by probing the 1.0.44 one first.
 2. It restarts the unit into its USB download mode; click **2. Load P1 recovery** (or **SteadyDigital recovery**) and
    pick the **USB download gadget**. The page checks the bootloader and loads
    the fpvOS recovery into RAM; nothing is written to flash yet.

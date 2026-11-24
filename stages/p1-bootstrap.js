@@ -1,6 +1,6 @@
 // Fetch and verify all recovery assets before any bootloader RAM modification.
 import { P1HidRecovery, P1_RAM_FILES, STEADYDIGITAL_RAM_FILES, p1Bootloader, sha256 } from '../transports/p1-hid.js';
-export { enterP1Bootloader, enterSteadyDigitalBootloader, P1_STOCK_USB, STEADYDIGITAL_STOCK_USB, P1_HID_FILTER, P1_STOCK_VERSIONS } from '../transports/p1-hid.js';
+export { enterP1Bootloader, enterSteadyDigitalBootloader, P1_STOCK_USB, STEADYDIGITAL_STOCK_USB, P1_HID_FILTER, P1_STOCK_VERSIONS, P1_AUTO } from '../transports/p1-hid.js';
 export const P1_RECOVERY_BASE = new URL('../assets/p1-updater/browser-v1/', import.meta.url);
 export const P1_RECOVERY_MANIFEST_SHA256 = '803da31a63e6bc34d1b4054c10dbfdf5965f190c5ed702c85cb7fe0d8a09a258';
 export const STEADYDIGITAL_RECOVERY_BASE = new URL('../assets/steadydigital-updater/browser-v1/', import.meta.url);
@@ -41,14 +41,15 @@ export const loadP1Recovery = ({ fetcher = globalThis.fetch, signal } = {}) => l
 export const loadSteadyDigitalRecovery = ({ fetcher = globalThis.fetch, signal } = {}) => loadRecovery({ label: 'SteadyDigital', base: STEADYDIGITAL_RECOVERY_BASE,
   manifestSha256: STEADYDIGITAL_RECOVERY_MANIFEST_SHA256, boardId: 21316, ramFiles: STEADYDIGITAL_RAM_FILES, fetcher, signal });
 export async function prepareP1Recovery(device, { stockVersion, signal, fetcher, assets: preloaded, progress = () => {}, log = () => {} } = {}) {
-  const { id } = p1Bootloader(stockVersion);
+  // 'auto' (P1_AUTO): the bootloader is found by probing, v1 first.
+  const { candidates } = p1Bootloader(stockVersion);
   progress('Downloading and checking P1 recovery…');
   const assets = preloaded ?? await loadP1Recovery({ fetcher, signal });
   const link = new P1HidRecovery(device, { stockVersion, signal, log,
     progress: ({ bytes, total }) => progress(`Loading P1 recovery: ${Math.round(bytes * 100 / total)}%`) });
   try {
     await link.open(); progress('Checking the P1 bootloader…');
-    await link.identify(assets.manifest.bootloaders[id].fingerprints);
+    await link.identify(Object.fromEntries(candidates.map((id) => [id, assets.manifest.bootloaders[id].fingerprints])));
     for (const { name, bytes } of assets.files) { progress(`Loading ${name} into RAM…`); await link.upload(name, bytes); }
     progress('Starting P1 recovery…'); await link.boot();
   } catch (e) { log(link.diagnostics(), 'warn'); throw e; } finally { await link.close(); }

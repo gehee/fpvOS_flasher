@@ -8,7 +8,7 @@ import { crc32 } from '../checksum.js';
 const TABLE = 0x2ffbf290, MAGIC = 0x2ffbf378, CALLBACK = 0x2ffbf330;
 class FakeHid extends EventTarget {
   constructor(variant = 'v1') {
-    super();
+    super(); this.variant = variant; this.env = {};
     this.layout = variant === 'v2'
       ? { magic: 0x2febebd0, table: 0x2febeae8, callback: 0x2febeb88, command: 0x2fe651d8, callbacks: [0x2fe85898, 0, 0, 0, 0x2fe85bd8, 0x2fe85da0, 0], fingerprints: [0x2fe85bd8, 0x2fe85da0, 0x2fe651d8, 0x2fe84fa0] }
       : { magic: MAGIC, table: TABLE, callback: CALLBACK, command: 0x2ff65e98, callbacks: [0x2ff86448, 0, 0, 0, 0x2ff86788, 0x2ff86950, 0], fingerprints: [0x2ff86788, 0x2ff86950, 0x2ff65e98, 0x2ff85b50] }; this.vendorId = 0x1d6b; this.productId = 0x0100; this.productName = 'USB download gadget';
@@ -42,6 +42,8 @@ class FakeHid extends EventTarget {
         this.transfer = { address: Number(b.getBigUint64(8, true)), size: b.getUint32(4, true), offset: 0 };
       } else {
         assert.ok(this.transfer); const t = this.transfer;
+        // the v2 loader commits one 64-byte packet per frame: 48 header + 15 data
+        if (this.variant === 'v2') assert.ok(body.length <= 15, `v2 write frame of ${body.length} bytes`);
         assert.ok(t.offset + body.length <= t.size); this.put(t.address + t.offset, body);
         this.writes.push({ address: t.address + t.offset, bytes: body.length }); t.offset += body.length;
         if (t.offset === t.size) this.transfer = null;
@@ -60,6 +62,7 @@ class FakeHid extends EventTarget {
     } else if (kind === 6) {
       const command = new TextDecoder().decode(body); this.commands.push(command);
       assert.equal(new DataView(this.get(this.layout.callback, 8).buffer).getBigUint64(0, true), BigInt(this.layout.command));
+      if (this.variant === 'v2') { assert.ok(command.length <= 15, `v2 command too long: ${command}`); this.run(command); return; }
       if (command.startsWith('crc32 ')) {
         const [, a, n, dest] = command.split(' '); const result = new Uint8Array(4);
         new DataView(result.buffer).setUint32(0, (crc32(this.get(parseInt(a, 16), parseInt(n, 16))) ^ (this.corruptCrc ? 1 : 0)) >>> 0);
@@ -67,10 +70,24 @@ class FakeHid extends EventTarget {
       } else assert.equal(command, 'setenv bootm_boot_mode nosec; setenv fdt_high ffffffffffffffff; setenv initrd_high ffffffffffffffff; bootm 24400000 26000000 22080000');
     } else throw new Error(`Unexpected operation ${kind}`);
   }
+  // The v2 loader's U-Boot, as far as the recovery uses it: variables, run, crc32, bootm.
+  run(line) {
+    const expand = (t) => t.replace(/\$\{(\w+)\}|\$(\w+)/g, (_, a, b) => this.env[a ?? b] ?? '');
+    const [verb, ...rest] = line.split(' ');
+    if (verb === 'set' || verb === 'setenv') { this.env[rest[0]] = expand(rest.slice(1).join(' ')); return; }
+    if (verb === 'run') { this.run(this.env[rest[0]]); return; }
+    const args = expand(rest.join(' ')).split(' ');
+    if (verb === 'crc32') {
+      const result = new Uint8Array(4), [a, n, dest] = args.map((x) => parseInt(x, 16));
+      new DataView(result.buffer).setUint32(0, (crc32(this.get(a, n)) ^ (this.corruptCrc ? 1 : 0)) >>> 0);
+      this.put(dest, result);
+    } else if (verb === 'bootm') this.booted = { args, env: { ...this.env } };
+    else throw new Error(`Unexpected v2 command ${line}`);
+  }
 }
 async function identified(options = {}) {
   const device = new FakeHid(options.stockVersion?.startsWith('2.') ? 'v2' : 'v1'), fingerprints = await device.fingerprints();
-  const link = new P1HidRecovery(device, { readTimeout: 20, ...options });
+  const link = new P1HidRecovery(device, { readTimeout: 20, commandPause: 0, ...options });
   await link.open(); await link.identify(fingerprints); return { device, link, fingerprints };
 }
 const fetchAssets = async (url) => new Response(await fs.readFile(new URL('../assets/p1-updater/browser-v1/' + new URL(url).pathname.split('/').pop(), import.meta.url)));
@@ -173,7 +190,13 @@ test('each listed v2 release uses only its own verified RAM layout', async () =>
       await assert.rejects(link.read(TABLE, 8), /approved RAM/);
       await assert.rejects(link.write(CALLBACK, new Uint8Array(8)), /out-of-range/);
       for (const name of Object.keys(P1_RAM_FILES)) await link.upload(name, new Uint8Array(976).fill(0x32));
-      await link.boot(); assert.equal(device.commands.filter(c => c.includes('bootm 244')).length, 1);
+      assert.ok(device.writes.filter(w => w.address >= 0x22080000).every(w => w.bytes <= 15), 'v2 images go in 15-byte frames');
+      assert.ok(device.commands.every(c => c.length <= 15), 'v2 commands stay within 15 characters');
+      await link.boot();
+      assert.deepEqual(device.booted.args, ['24400000', '26000000', '22080000']);
+      const { env } = device.booted;
+      assert.equal(env.bootargs, 'console=ttyS0,1152000 mem=128M rdinit=/init maxcpus=1 nr_cpus=1 clk_ignore_unused');
+      assert.equal(env.fdt_high, 'ffffffffffffffff'); assert.equal(env.initrd_high, 'ffffffffffffffff'); assert.equal(env.bootm_boot_mode, 'nosec');
     } finally { await link.close(); }
   }
 });
@@ -268,4 +291,65 @@ test('a failed SteadyDigital preparation writes the HID trace into the log, befo
     log: (m) => lines.push(m), readTimeout: 20 }), /No compatible P1 bootloader reply/);
   assert.ok(lines.some((l) => /HID diagnostics/.test(l)), 'trace logged');
   assert.equal(d.writes.filter((w) => w.address !== d.layout.magic).length, 0);
+});
+
+// Detection ('auto'): the v1 probe first, the v2 one only once v1 got no reply.
+const V1_MAGIC = MAGIC, V2_MAGIC = 0x2febebd0;
+async function autoPolicy(device) {
+  await device.fingerprints();   // the device's own code, where its layout keeps it
+  return { v1: await new FakeHid('v1').fingerprints(), v2: await new FakeHid('v2').fingerprints() };
+}
+test('auto: a v1 loader is found by the v1 probe and never sent the v2 one', async () => {
+  const device = new FakeHid('v1'), link = new P1HidRecovery(device, { stockVersion: 'auto', readTimeout: 20, commandPause: 0 });
+  const logs = []; link.log = (t) => logs.push(t);
+  await link.open();
+  try {
+    await link.identify(await autoPolicy(device));
+    assert.equal(link.bootloader, 'v1'); assert.equal(link.writeChunk, 960);
+    assert.ok(!device.writes.some(w => w.address === V2_MAGIC), 'no v2 probe on a v1 loader');
+    assert.deepEqual(device.writes[0], { address: V1_MAGIC, bytes: 1 });
+    assert.match(logs.join('\n'), /Detected and verified the P1 stock 1\.0\.44 bootloader/);
+  } finally { await link.close(); }
+});
+test('auto: a v2 loader gets the v1 probes first, then is found by the v2 probe and booted the v2 way', async () => {
+  const device = new FakeHid('v2'), link = new P1HidRecovery(device, { stockVersion: 'auto', readTimeout: 20, commandPause: 0 });
+  await link.open();
+  try {
+    await link.identify(await autoPolicy(device));
+    assert.equal(link.bootloader, 'v2'); assert.equal(link.writeChunk, 15);
+    const firstV2 = device.writes.findIndex(w => w.address === V2_MAGIC);
+    assert.ok(firstV2 > 0, 'the v2 probe was sent');
+    assert.ok(device.writes.slice(0, firstV2).every(w => w.address === V1_MAGIC && w.bytes === 1), 'only v1 probes before it');
+    assert.equal(device.writes.slice(0, firstV2).length, 4, 'every v1 attempt, so a slow v1 loader is never sent the v2 probe');
+    assert.match(link.diagnostics(), /trying the v1 .*\n(.*\n)*.*trying the v2/);
+    for (const name of Object.keys(P1_RAM_FILES)) await link.upload(name, new Uint8Array(976).fill(0x33));
+    assert.ok(device.writes.filter(w => w.address >= 0x22080000).every(w => w.bytes <= 15));
+    await link.boot(); assert.deepEqual(device.booted.args, ['24400000', '26000000', '22080000']);
+  } finally { await link.close(); }
+});
+test('auto: a loader adapted by an earlier try is found by reading, with no new probe', async () => {
+  const device = new FakeHid('v2'), policy = await autoPolicy(device);
+  const first = new P1HidRecovery(device, { stockVersion: 'auto', readTimeout: 20 }); await first.open();
+  await first.identify(policy); await first.close();
+  const probes = device.writes.filter(w => w.address === V1_MAGIC || w.address === V2_MAGIC).length;
+  const next = new P1HidRecovery(device, { stockVersion: 'auto', readTimeout: 20 }); await next.open();
+  try {
+    await next.identify(policy); assert.equal(next.bootloader, 'v2');
+    assert.equal(device.writes.filter(w => w.address === V1_MAGIC || w.address === V2_MAGIC).length, probes);
+  } finally { await next.close(); }
+});
+test('auto: a loader answering neither probe fails naming both, with no command and no other write', async () => {
+  const device = new FakeHid('v2'), policy = await autoPolicy(device); device.dropReplies = true;
+  const link = new P1HidRecovery(device, { stockVersion: 'auto', readTimeout: 20 }); await link.open();
+  try {
+    await assert.rejects(link.identify(policy), /tried the stock 1\.0\.44 and stock 2\.x bootloaders/);
+    assert.ok(device.writes.every(w => (w.address === V1_MAGIC || w.address === V2_MAGIC) && w.bytes === 1));
+    assert.equal(device.commands.length, 0);
+  } finally { await link.close(); }
+});
+test('auto: a policy missing either bootloader is rejected before any probe', async () => {
+  const device = new FakeHid('v1'), { v1 } = await autoPolicy(device);
+  const link = new P1HidRecovery(device, { stockVersion: 'auto' }); await link.open();
+  try { await assert.rejects(link.identify({ v1 }), /fingerprint policy/); assert.equal(device.frames.length, 0); }
+  finally { await link.close(); }
 });

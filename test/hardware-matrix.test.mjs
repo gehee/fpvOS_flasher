@@ -147,7 +147,9 @@ test('stock preparation: each board owns its own Sirius port and no two boards s
     assert.equal(prep.hidFilter, P1_HID_FILTER, p.meta.id);
     assert.equal(typeof prep.enterBootloader, 'function', p.meta.id);
     assert.equal(typeof prep.loadRecovery, 'function', p.meta.id);
-    assert.ok(prep.stockVersions.includes(prep.stockVersion), `${p.meta.id} default stock version is a supported one`);
+    // detected where there is more than one version, else that one
+    if (prep.stockVersion === 'auto') assert.ok(prep.stockVersions.length > 1, `${p.meta.id} detects its stock version`);
+    else assert.ok(prep.stockVersions.includes(prep.stockVersion), `${p.meta.id} default stock version is a supported one`);
     for (const k of ['name', 'title', 'confirm', 'ask', 'restart', 'load', 'serialName']) assert.ok(prep.ui[k], `${p.meta.id} ui.${k}`);
   }
   const ports = PROFILES.filter((p) => p.meta.preparation).map((p) => usbKey(p.meta.preparation.serialFilter));
