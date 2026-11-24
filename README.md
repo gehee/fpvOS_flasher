@@ -27,8 +27,8 @@ image without a version check, so other Lite versions may work).
 | Device | Stock version | Linux | macOS | Windows | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Ascent Lite | 17.5.3 | ☑️ | ☑️ | ☑️ | |
-| | 18.21.10 | ☑️ | ✅ | ✅ | macOS and Windows: stock → fpvOS 2026.10.beta4-99 (test build), 2026-11-23 |
-| Ascent Lite+ | 18.21.10 | ☑️ | ✅ | ✅ | macOS and Windows: stock → fpvOS 2026.10.beta4-99 (test build), 2026-11-23; keeps its serial number |
+| | 18.21.10 | ✅ | ✅ | ✅ | Linux, macOS and Windows: stock → fpvOS 2026.10.beta4-99 (test build), 2026-11-23 |
+| Ascent Lite+ | 18.21.10 | ✅ | ✅ | ✅ | Linux, macOS and Windows: stock → fpvOS 2026.10.beta4-99 (test build), 2026-11-23; keeps its serial number |
 | Ascent VRX | 17.5.3 | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
 | | 17.5.8 | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
 | | 18.21.10 | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
