@@ -103,7 +103,7 @@ jobs:
           done
           if [ -d _site/firmware ] && [ -d _site/preview ]; then cp -r _site/firmware _site/preview/; fi
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
       - id: deployment
