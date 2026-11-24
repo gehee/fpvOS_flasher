@@ -32,7 +32,7 @@ image without a version check, so other Lite versions may work).
 | Ascent VRX | 17.5.3 | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
 | | 17.5.8 | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
 | | 18.21.10 | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
-| BETAFPV P1 Air | 1.0.44 | ✅ | ❌ | ❌ | flashed by gehee (Linux Chromium, 2026-11-03), and again from this page 2026-11-23 (Linux Chromium), its bootloader detected with no version to pick |
+| BETAFPV P1 Air | 1.0.44 | ✅ | ❌ | ✅ | Linux: flashed by gehee (Linux Chromium, 2026-11-03), and again from this page 2026-11-23 (Linux Chromium), its bootloader detected with no version to pick. Windows: through the fpvOS Recovery app 0.4.2, 2026-11-23, its bootloader detected the same way; macOS needs a 0.4.2 macOS app, not yet released or tried |
 | | 2.0.5 | ☑️ | ❌ | ❌ | bootloader checked offline only; needs a P1 build with the U-Boot bank-selection fix |
 | | 2.0.6 | ☑️ | ❌ | ❌ | bootloader checked offline only; needs the bank-selection fix |
 | | 2.1.2 | ✅ | ✅ | ✅ | Linux: flashed by mh1412 (PR #2), and again from this page 2026-11-23 (Linux Chromium), its bootloader detected with no version to pick. macOS and Windows: through the fpvOS Recovery app, 2026-11-23 (Windows again with app 0.4.1; that time the unit needed a manual restart before the flasher could connect); fpvOS went to the bank stock was not running from, stock 2.1.2 kept on the other |
