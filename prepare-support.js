@@ -41,7 +41,7 @@ const RECOVERY_APP_BASE =
 // The Windows download names its app version: the recovery-app release that
 // carries fpvOS-recovery-win-<version>.zip (fpvOS_recovery's workflow names it
 // from Cargo.toml). Update it with each Windows release.
-export const RECOVERY_APP_WINDOWS_VERSION = '0.4.2';
+export const RECOVERY_APP_WINDOWS_VERSION = '0.4.5';
 
 export function recoveryAppUrl(file) {
   return `${RECOVERY_APP_BASE}/${file}`;
