@@ -38,6 +38,11 @@ const RECOVERY_APP_BASE =
     ? 'recovery-app'
     : 'https://github.com/gehee/fpvOS_recovery/releases/latest/download';
 
+// The Windows download names its app version: the recovery-app release that
+// carries fpvOS-recovery-win-<version>.zip (fpvOS_recovery's workflow names it
+// from Cargo.toml). Update it with each Windows release.
+export const RECOVERY_APP_WINDOWS_VERSION = '0.4.1';
+
 export function recoveryAppUrl(file) {
   return `${RECOVERY_APP_BASE}/${file}`;
 }
@@ -81,7 +86,7 @@ export function recoveryAppDownload(userAgent = '') {
     return {
       os: 'Windows',
       label: 'Download for Windows',
-      file: 'fpvOS-Recovery-Windows.zip',
+      file: `fpvOS-recovery-win-${RECOVERY_APP_WINDOWS_VERSION}.zip`,
       note: 'The first time, Windows asks once to let it install the USB driver for the bootloader: choose Yes.',
       firstRun: 'The first time, Windows SmartScreen may say it protected your PC. Choose More info, then Run anyway.',
     };
