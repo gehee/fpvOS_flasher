@@ -57,7 +57,7 @@ test('recoveryAppDownload offers the native app on macOS and Windows', () => {
   assert.ok(mac.note);
   const win = recoveryAppDownload(UA.windows);
   assert.equal(win.os, 'Windows');
-  assert.match(win.file, /^fpvOS-recovery-win-\d+\.\d+\.\d+\.zip$/);
+  assert.equal(win.file, 'fpvOS-recovery-win.zip');
   assert.match(win.label, /Windows/);
   assert.ok(win.note);
 });

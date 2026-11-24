@@ -29,7 +29,8 @@ export function browserPrepareSupport(userAgent = '') {
 // the browser path already works (Linux/ChromeOS) or there is no build (other).
 // The apps live in their own repo, fpvOS_recovery, whose recovery-app workflow
 // publishes them as release assets; the file names below must match that
-// workflow's output. See RELEASING.md there.
+// workflow's output. Both names are fixed, so the latest release is always the
+// download, with nothing to change here per release.
 // Served from localhost (e.g. local testing over an SSH tunnel), take the apps
 // from ./recovery-app/ beside the page instead, so the download works without a
 // published release.
@@ -37,11 +38,6 @@ const RECOVERY_APP_BASE =
   (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1|::1)$/.test(location.hostname))
     ? 'recovery-app'
     : 'https://github.com/gehee/fpvOS_recovery/releases/latest/download';
-
-// The Windows download names its app version: the recovery-app release that
-// carries fpvOS-recovery-win-<version>.zip (fpvOS_recovery's workflow names it
-// from Cargo.toml). Update it with each Windows release.
-export const RECOVERY_APP_WINDOWS_VERSION = '0.4.5';
 
 export function recoveryAppUrl(file) {
   return `${RECOVERY_APP_BASE}/${file}`;
@@ -86,7 +82,7 @@ export function recoveryAppDownload(userAgent = '') {
     return {
       os: 'Windows',
       label: 'Download for Windows',
-      file: `fpvOS-recovery-win-${RECOVERY_APP_WINDOWS_VERSION}.zip`,
+      file: 'fpvOS-recovery-win.zip',
       note: 'The first time, Windows asks once to let it install the USB driver for the bootloader: choose Yes.',
       firstRun: 'The first time, Windows SmartScreen may say it protected your PC. Choose More info, then Run anyway.',
     };
