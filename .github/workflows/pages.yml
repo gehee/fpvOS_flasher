@@ -55,6 +55,7 @@ jobs:
       contents: read
       pages: write
       id-token: write
+      actions: read   # deploy-pages lists this run's artifacts to find github-pages
     # one deploy at a time; a newer push waits rather than cutting one short
     concurrency:
       group: pages
