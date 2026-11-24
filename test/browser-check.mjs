@@ -80,23 +80,32 @@ async function steadyDigitalStockDetection() {
 }
 
 async function preparationBlockedOffLinux(linuxUA) {
-  console.log('--- stock preparation is gated off Linux/ChromeOS (macOS message + opt-out)');
+  console.log('--- off Linux/ChromeOS, stock preparation goes to the fpvOS Recovery app (macOS, Windows)');
   const fail = [];
-  const macUA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36';
-  await cdp('Emulation.setUserAgentOverride', { userAgent: macUA });
+  const uas = {
+    macOS: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36',
+    Windows: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36',
+  };
   try {
-    await cdp('Page.navigate', { url: `${base}?device=sdstock` });
-    await until("document.readyState === 'complete' && !document.querySelector('#connect').hidden", 10000, 'stock page (mac UA)');
-    await js("document.querySelector('#connect').click()");
-    await until("document.querySelector('#ask').open", 3000, 'OS-gate dialog');
-    if (!await js("/Linux or ChromeOS/.test(document.querySelector('#ask-title').textContent)")) fail.push('gate dialog title does not point to Linux/ChromeOS');
-    if (!await js("/macOS/.test(document.querySelector('#ask-text').textContent) && /Linux or ChromeOS/.test(document.querySelector('#ask-text').textContent)")) fail.push('gate message does not name macOS and Linux/ChromeOS');
-    // declining the gate must not start preparation or send a reboot
-    await js("document.querySelector('#ask').close('cancel')");
-    await new Promise((r) => setTimeout(r, 300));
-    if (!await js("document.querySelector('#p1-preparation').hidden")) fail.push('preparation panel opened despite declining the gate');
-    if (await js("Array.isArray(window.__fake.p1RebootRaw)")) fail.push('a reboot was sent despite declining the gate');
-    await shot('prepare-blocked-off-linux');
+    for (const [os, ua] of Object.entries(uas)) {
+      await cdp('Emulation.setUserAgentOverride', { userAgent: ua });
+      await cdp('Page.navigate', { url: `${base}?device=sdstock` });
+      await until("document.readyState === 'complete' && !document.querySelector('#connect').hidden", 10000, `stock page (${os} UA)`);
+      await js("document.querySelector('#connect').click()");
+      await until("!document.querySelector('#recovery-app').hidden && document.querySelector('#recovery-app').open", 3000, `recovery app panel (${os})`);
+      if (!await js(`document.querySelector('#recovery-os').textContent === ${JSON.stringify(os)}`)) fail.push(`${os}: the panel does not name ${os}`);
+      if (os === 'macOS') {
+        // the Terminal command fetches the app (no quarantine): the latest release's zip,
+        // or ./recovery-app/'s when the page is served from localhost, as here
+        if (await js("document.querySelector('#recovery-terminal').hidden")) fail.push('macOS: no Terminal command');
+        if (!await js("/(releases\\/latest\\/download|recovery-app)\\/fpvOS-Recovery-macOS\\.zip'/.test(document.querySelector('#recovery-command').textContent)")) fail.push('macOS: the command does not fetch the app zip');
+      } else if (!await js("document.querySelector('#recovery-terminal').hidden")) fail.push(`${os}: a Terminal command shown`);
+      if (!await js("/Download/.test(document.querySelector('#recovery-download').textContent)")) fail.push(`${os}: no download button`);
+      // the app does the bootloader step: the page must not start preparation or send a reboot
+      if (!await js("document.querySelector('#p1-preparation').hidden")) fail.push(`${os}: the browser preparation panel opened`);
+      if (await js("Array.isArray(window.__fake.p1RebootRaw)")) fail.push(`${os}: a reboot was sent`);
+      await shot(`recovery-app-${os}`);
+    }
   } finally {
     await cdp('Emulation.setUserAgentOverride', { userAgent: linuxUA });
   }

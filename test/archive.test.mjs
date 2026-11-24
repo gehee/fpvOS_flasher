@@ -94,7 +94,9 @@ test('tar, .tar.gz and .tar.xz, with long names', { skip: !(HAS_TAR && HAS_XZ) &
   writeFileSync(path.join(deep, 'Ascent_H_Sky_18_21_10.img'), IMG);
   writeFileSync(path.join(deep, 'notes.txt'), 'hello');
   // bsdtar (macOS) spells GNU's format 'gnutar'
-  const gnu = spawnSync('tar', ['-c', '--format=gnu', '-f', path.join(dir, 'probe.tar'), '-C', path.join(dir, 'src'), 'notes.txt']).status === 0 ? 'gnu' : 'gnutar';
+  // (the probe archives a file that exists, or it fails on every tar)
+  const probe = path.relative(path.join(dir, 'src'), path.join(deep, 'notes.txt'));
+  const gnu = spawnSync('tar', ['-c', '--format=gnu', '-f', path.join(dir, 'probe.tar'), '-C', path.join(dir, 'src'), probe]).status === 0 ? 'gnu' : 'gnutar';
   for (const [fmt, out, z] of [[gnu, 'gnu.tar', []], ['posix', 'pax.tar.gz', ['-z']], ['ustar', 'ustar.tar.xz', ['-J']]]) {
     execFileSync('tar', ['-c', `--format=${fmt}`, ...z, '-f', path.join(dir, out), '-C', path.join(dir, 'src'), '.']);
     const r = await open(path.join(dir, out));
