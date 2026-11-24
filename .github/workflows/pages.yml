@@ -45,7 +45,7 @@ jobs:
       - name: Browser integration (simulated devices)
         run: node test/browser-check.mjs
 
-  deploy:
+  build:
     # a push of `live` or `preview` once its tests pass, a run by hand, or the
     # deletion of `preview` (test skipped)
     if: ${{ !failure() && !cancelled() && (github.ref == 'refs/tags/live' || github.ref == 'refs/tags/preview' || github.event_name == 'workflow_dispatch' || (github.event_name == 'delete' && github.event.ref_type == 'tag' && github.event.ref == 'preview')) }}
@@ -55,14 +55,6 @@ jobs:
       contents: read
       pages: write
       id-token: write
-      actions: read   # deploy-pages lists this run's artifacts to find github-pages
-    # one deploy at a time; a newer push waits rather than cutting one short
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -107,5 +99,24 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
+
+  deploy:
+    # its own job, as GitHub's Pages template has it: deploy-pages found no
+    # artifact when it ran in the job that had just uploaded it
+    if: ${{ !failure() && !cancelled() && needs.build.result == 'success' }}
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+      actions: read   # deploy-pages lists this run's artifacts to find github-pages
+    # one deploy at a time; a newer push waits rather than cutting one short
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v5
