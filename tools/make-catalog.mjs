@@ -3,7 +3,7 @@
 // one as the page does, copies it to OUT/<release>/<name it is sent as>, and
 // adds the release to OUT/catalog.json after those already there (call it
 // newest release first). The page reads firmware/catalog.json next to index.html.
-//   node tools/make-catalog.mjs --release 2026.10.beta5 [--out firmware] IMAGE...
+//   node tools/make-catalog.mjs --release 2026.10.beta5 [--out firmware] [--every-board] IMAGE...
 // The Pages deploy runs it on every fpvOS release's files: a browser cannot
 // download them from the release page itself (no CORS on GitHub's asset host).
 // The newest release is the page's one-click Install, so only the devices
@@ -20,8 +20,13 @@ import { prepareFirmware } from '../flasher.js';
 // units (README). Not yet: the VRX's AR9311 recovery install and the
 // stock-to-fpvOS bootstrap (not power-loss atomic, no backup), the P1's.
 const PROVEN = new Set(['ascent-air']);
+// --every-board: every device this page has an image for, proven or not - the
+// preview page's release candidate (tools/preview-firmware.json), there to
+// be validated on hardware before it is released.
 
 const args = process.argv.slice(2);
+const everyBoard = args.includes('--every-board');
+if (everyBoard) args.splice(args.indexOf('--every-board'), 1);
 const option = (name, fallback) => {
   const i = args.indexOf(name);
   if (i < 0) return fallback;
@@ -31,7 +36,7 @@ const option = (name, fallback) => {
 const release = option('--release');
 const out = option('--out', 'firmware');
 if (!release || !/^[\w.+-]+$/.test(release) || !args.length) {
-  console.error('usage: make-catalog.mjs --release VERSION [--out DIR] IMAGE...');
+  console.error('usage: make-catalog.mjs --release VERSION [--out DIR] [--every-board] IMAGE...');
   process.exit(2);
 }
 
@@ -46,7 +51,7 @@ for (const source of args) {
   }
   const all = [parsed.profileId];
   if (parsed.profileId === 'fpvos-ar9311' && parsed.kind === 0) all.push('ascent-vrx');
-  const devices = all.filter((d) => PROVEN.has(d));
+  const devices = all.filter((d) => everyBoard || PROVEN.has(d));
   if (!devices.length) {
     console.log(`${source}: not listed, ${all.join(', ')} installs are not proven on hardware yet`);
     continue;

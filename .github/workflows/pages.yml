@@ -84,17 +84,41 @@ jobs:
       - name: Firmware
         # every fpvOS release's images, newest first, for the page's firmware
         # choice: a browser cannot download them from the release page (no CORS
-        # on GitHub's asset host), so they are published next to the pages
+        # on GitHub's asset host), so they are published next to the pages.
+        # /preview/ lists first the release candidate the preview commit names
+        # in tools/preview-firmware.json (each file checked against its
+        # sha256, every board offered), then the same releases. The live page
+        # never reads it.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ ! -f tools/make-catalog.mjs ]; then echo "no catalog tool in this commit"; exit 0; fi
-          for tag in $(gh release list -R gehee/fpvOS --exclude-drafts -L 20 --json tagName -q '.[].tagName'); do
+          tags=$(gh release list -R gehee/fpvOS --exclude-drafts -L 20 --json tagName -q '.[].tagName')
+          for tag in $tags; do
             mkdir -p "$RUNNER_TEMP/fw/$tag"
-            gh release download "$tag" -R gehee/fpvOS -D "$RUNNER_TEMP/fw/$tag" -p '*.img' -p '*.fwu' || continue
-            node tools/make-catalog.mjs --release "$tag" --out _site/firmware "$RUNNER_TEMP/fw/$tag"/*
+            gh release download "$tag" -R gehee/fpvOS -D "$RUNNER_TEMP/fw/$tag" -p '*.img' -p '*.fwu' || rm -rf "$RUNNER_TEMP/fw/$tag"
           done
-          if [ -d _site/firmware ] && [ -d _site/preview ]; then cp -r _site/firmware _site/preview/; fi
+          releases() {   # OUT: every release's images, newest first, after what OUT lists
+            for tag in $tags; do
+              [ -d "$RUNNER_TEMP/fw/$tag" ] || continue
+              node tools/make-catalog.mjs --release "$tag" --out "$1" "$RUNNER_TEMP/fw/$tag"/*
+            done
+          }
+          releases _site/firmware
+          if [ -d _site/preview ]; then
+            if git show refs/tags/preview:tools/preview-firmware.json > "$RUNNER_TEMP/preview.json" 2>/dev/null; then
+              candidate=$(jq -r .release "$RUNNER_TEMP/preview.json")
+              mkdir -p "$RUNNER_TEMP/preview-fw"
+              jq -r '.files[] | "\(.url) \(.sha256) \(.name)"' "$RUNNER_TEMP/preview.json" |
+                while read -r url sum name; do
+                  case "$name" in */*|.*|'') echo "bad file name: $name"; exit 1 ;; esac
+                  curl -sfL --retry 3 -o "$RUNNER_TEMP/preview-fw/$name" "$url"
+                  echo "$sum  $RUNNER_TEMP/preview-fw/$name" | sha256sum -c -
+                done
+              node tools/make-catalog.mjs --every-board --release "$candidate" --out _site/preview/firmware "$RUNNER_TEMP/preview-fw"/*
+            fi
+            releases _site/preview/firmware
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v5
         with:

@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "The preview page's release candidate, before it is an fpvOS release: the deploy",
+    "(.github/workflows/pages.yml) downloads each file, checks its sha256, and lists it",
+    "first in /preview/'s catalog, every board included (make-catalog.mjs --every-board).",
+    "The live page never reads this. Files: a gist, at a fixed revision."
+  ],
+  "release": "2026.11.beta1",
+  "files": [
+    {
+      "name": "Ascent_H_Sky_18_21_10.img",
+      "url": "https://gist.githubusercontent.com/gehee/eb52744783c456b7f9101834ef99f82c/raw/e8a0804dfd8513dfa1c9bb3973a28bc66d83f0ef/Ascent_H_Sky_18_21_10.img",
+      "sha256": "11f6b02c58e372eca6e27d61c99893750b31dd22206e05edd0f864dc0369efb1"
+    },
+    {
+      "name": "fpvos-ascent-vrx-2026.11.beta1.fwu",
+      "url": "https://gist.githubusercontent.com/gehee/eb52744783c456b7f9101834ef99f82c/raw/e8a0804dfd8513dfa1c9bb3973a28bc66d83f0ef/fpvos-ascent-vrx-2026.11.beta1.fwu",
+      "sha256": "c1ac403521430523218265f3e6b541ba87acb5e605b4a4984a3296c42dd14326"
+    },
+    {
+      "name": "fpvos-p1-air-2026.11.beta1.fwu",
+      "url": "https://gist.githubusercontent.com/gehee/eb52744783c456b7f9101834ef99f82c/raw/e8a0804dfd8513dfa1c9bb3973a28bc66d83f0ef/fpvos-p1-air-2026.11.beta1.fwu",
+      "sha256": "731b2a2c67d208a4d05d9a9a89841c885cd3ee3e9a501610073334a5cdc57f52"
+    },
+    {
+      "name": "fpvos-steadydigital-2026.11.beta1.fwu",
+      "url": "https://gist.githubusercontent.com/gehee/eb52744783c456b7f9101834ef99f82c/raw/e8a0804dfd8513dfa1c9bb3973a28bc66d83f0ef/fpvos-steadydigital-2026.11.beta1.fwu",
+      "sha256": "bb21e7b007e8305c1ef7ec3c3b04eef97d55ae1b44b3ab4c5bb252fe70d103eb"
+    }
+  ]
+}
