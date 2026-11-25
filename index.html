@@ -203,6 +203,9 @@
   .segmented button { border: none; padding: 7px 18px; border-radius: 6px; }
   .segmented button[aria-checked="true"] { background: var(--data); color: var(--ground); opacity: 1; }
   #device-mode-note { flex-basis: 100%; margin: 0; color: var(--quiet); font-size: 13.5px; }
+  #stock-return { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+  #stock-return .label { color: var(--quiet); font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+  #stock-return-note { margin: 6px 0 10px; color: var(--quiet); font-size: 13.5px; }
 
   /* the HUD's segmented track: cyan blocks while running, lime when done */
   .track {
@@ -466,6 +469,13 @@
           <button id="mode-bridge" role="radio">Bridge</button>
         </div>
         <p id="device-mode-note"></p>
+      </div>
+      <!-- Back to the unit's stock firmware: a bank switch where stock is kept
+           (P1 Air, SteadyDigital), else how to flash Caddx's update. -->
+      <div id="stock-return" hidden>
+        <span class="label">Stock firmware</span>
+        <p id="stock-return-note"></p>
+        <button id="stock-switch">Switch to stock firmware</button>
       </div>
     </details>
   </section>

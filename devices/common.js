@@ -8,6 +8,16 @@ export const stockFirmware = (info) => {
   const v = firmwareVersion(info.firmware);
   return v ? `stock firmware ${v.join('.')}` : 'stock firmware';
 };
+// The fpvOS version every fpvOS image reports in its updater's SDK field
+// (fpvOS scripts/fpvos-version): the release tag, VERSION+gHASH[-dirty]
+// between tags, and git describe's -K-gHASH on builds before 2026.11.
+// Updaters before that say "development" or leave it empty: no version then.
+export const fpvosVersion = (info) => (info.sdk && info.sdk !== 'development' ? `fpvOS ${info.sdk}` : 'fpvOS');
+// YYYY.MM[.betaN] and, for git describe's form, how many commits past it.
+export function parseFpvosVersion(sdk) {
+  const m = /^(\d{4})\.(\d{1,2})(?:\.beta(\d+))?(?:-(\d+)-g[0-9a-f]+|\+g[0-9a-f]+)?(?:-dirty)?$/.exec(sdk ?? '');
+  return m ? { year: +m[1], month: +m[2], beta: m[3] == null ? null : +m[3], ahead: +(m[4] ?? 0) } : null;
+}
 export const formatHex = (n) => `0x${n.toString(16).padStart(8, '0')}`;
 
 export function aswImage({ prefix, board, parse, checks, capacity = false }) {

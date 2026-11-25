@@ -326,9 +326,22 @@ test('standard VRX stock reference passes production profile and trust key', { s
 test('the device mode switch is offered from fpvOS 2026.10.beta4-45 on', async () => {
   const { keepsBridgeMode } = await import('../devices/ascent-air.js');
   for (const sdk of ['2026.10.beta4-45-g537b17a', '2026.10.beta4-45-g537b17a-dirty', '2026.10.beta4-120-gabcdef0', '2026.10.beta5',
-    '2026.10.beta5-3-g1234567', '2026.10', '2026.11.beta1', '2027.01']) assert.equal(keepsBridgeMode({ sdk }), true, sdk);
+    '2026.10.beta5-3-g1234567', '2026.10', '2026.11.beta1', '2026.11.beta1+g304b4c79', '2026.11.beta1+g304b4c79-dirty',
+    '2027.01']) assert.equal(keepsBridgeMode({ sdk }), true, sdk);
   for (const sdk of ['', '2026.10.beta4', '2026.10.beta4-44-g4372d89-dirty', '2026.10.beta3-29-g897a489', '2026.09',
-    'development', '2026.10.beta4-45-gZZZ', '18.21.10']) assert.equal(keepsBridgeMode({ sdk }), false, sdk);
+    'development', '2026.10.beta4-45-gZZZ', '18.21.10', '2026.11.beta1+g', '2026.11.beta1+gZZZ']) assert.equal(keepsBridgeMode({ sdk }), false, sdk);
+});
+
+test('every fpvOS board shows the version its updater reports, the same way', () => {
+  const fpvosInfo = { 'ascent-air': { detail: 'normal mode', firmware: 'Ascent_H_Sky_18_21_10' },
+    'fpvos-ar9311': {}, 'fpvos-p1-air': {}, 'fpvos-steadydigital': {} };
+  for (const [id, info] of Object.entries(fpvosInfo)) {
+    const { describe } = getProfile(id).meta;
+    for (const sdk of ['2026.11.beta1', '2026.11.beta1+g304b4c79-dirty', '2026.10.beta4-109-ge60618d'])
+      assert.deepEqual([describe({ ...info, sdk }).fpvos, describe({ ...info, sdk }).firmware], [true, `fpvOS ${sdk}`], `${id} ${sdk}`);
+    // updaters from before the version was reported
+    for (const sdk of ['', 'development', undefined]) assert.equal(describe({ ...info, sdk }).firmware, 'fpvOS', `${id} ${sdk}`);
+  }
 });
 
 test('an fpvOS install is said to run only when the unit says so', () => {
@@ -361,4 +374,24 @@ test('an fpvOS install is said to run only when the unit says so', () => {
   const p1 = getProfile('fpvos-p1-air').meta;
   r = installResult({ model: 'BETAFPV P1 Air', release: '2026.11', secs: 60, now: p1.describe({}), answers: p1.releaseAnswers });
   assert.match(r.text, /runs fpvOS 2026\.11/);
+});
+
+// The way back to stock offered under Advanced: a bank switch where the unit
+// keeps stock on its other bank (the updater's "stock" request), else Caddx's
+// update flashed here; none for boards whose updater has no stock step.
+test('stock return: bank switch on the P1 Air and SteadyDigital, the Lite on new enough fpvOS, a restore on the VRX', async () => {
+  assert.equal(getProfile('fpvos-p1-air').meta.stockReturn, 'bank');
+  assert.equal(getProfile('fpvos-steadydigital').meta.stockReturn, 'bank');
+  // the Lite: its other bank's stock from fpvOS 2026.11.beta1 on, a reflash before
+  const lite = getProfile('ascent-air').meta.stockReturn;
+  for (const sdk of ['2026.11.beta1', '2026.11.beta1+g304b4c79', '2026.11.beta1+g304b4c79-dirty', '2026.11',
+    '2027.01']) assert.equal(lite({ sdk }), 'bank-if-kept', sdk);
+  for (const sdk of ['', '2026.10.beta4', '2026.10.beta4-113-g304b4c7', '2026.10.beta4-131-g1234567-dirty',
+    '2026.10.beta5', '2026.10', '2026.10.beta3-120-g1234567',
+    '2026.09.beta1', 'development', '18.21.10']) assert.equal(lite({ sdk }), 'flash', sdk);
+  // the standard VRX keeps no copy of its stock kernel and device tree
+  assert.equal(getProfile('fpvos-ar9311').meta.stockReturn, 'restore');
+  assert.equal(getProfile('ascent-vrx').meta.stockReturn, undefined);
+  const { switchesToStockBank } = await import('../devices/ascent-air.js');
+  assert.equal(switchesToStockBank({}), false);
 });

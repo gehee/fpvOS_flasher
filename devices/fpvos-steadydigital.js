@@ -15,7 +15,7 @@
 // recovery over WebHID); once it runs fpvOS or the clean recovery, this profile
 // installs from there.
 import { ASCENT_TRANSPORT, ASCENT_PROTOCOL, deviceModeOf } from '../transports/ascent.js';
-import { defineDevice } from './common.js';
+import { defineDevice, fpvosVersion } from './common.js';
 import { FPVOS_PREPARE, FPVOS_TRANSFER, FPVOS_INSTALL, FPVOS_REBOOT_VERIFY } from '../stages/fpvos.js';
 import { SEND_LOCATION } from '../stages/location.js';
 import { enterSteadyDigitalBootloader, prepareSteadyDigitalRecovery, loadSteadyDigitalRecovery, STEADYDIGITAL_STOCK_USB, P1_HID_FILTER } from '../stages/p1-bootstrap.js';
@@ -43,6 +43,9 @@ export const FPVOS_STEADYDIGITAL = defineDevice({
     // normal and bridge mode where the updater names its mode; the firmware keeps
     // bridge across reboots (S61fpvos-usb), so bridgeKept stays at its default
     deviceModes: (info) => deviceModeOf(info) !== null,
+    // stock stays on the other bank: the updater's "stock" request selects it
+    // and restarts (fpvos-update nand stock)
+    stockReturn: 'bank',
     preparation: Object.freeze({ enterBootloader: enterSteadyDigitalBootloader, loadRecovery: prepareSteadyDigitalRecovery, loadAssets: loadSteadyDigitalRecovery,
       serialFilter: STEADYDIGITAL_STOCK_USB, hidFilter: P1_HID_FILTER, stockVersions: Object.freeze(['2.1.2']),
       stockVersion: '2.1.2',
@@ -50,7 +53,7 @@ export const FPVOS_STEADYDIGITAL = defineDevice({
         confirm: 'This is a Skyzone SteadyDigital on its stock firmware.',
         ask: 'Prepare this unit in the browser and install fpvOS? Keep external power connected throughout. Nothing is written to flash yet; the bootloader is checked first, and stock stays in bank A.',
         restart: '1. Restart stock SteadyDigital', load: '2. Load SteadyDigital recovery', serialName: 'SteadyDigital' }) }),
-    describe: () => ({ model: 'Skyzone SteadyDigital', fpvos: true, firmware: 'fpvOS' }),
+    describe: (info) => ({ model: 'Skyzone SteadyDigital', fpvos: true, firmware: fpvosVersion(info) }),
     identity: { matches: matchesFpvosSteadyDigital, normalMatches: (a, b) => matchesFpvosSteadyDigital(a) && matchesFpvosSteadyDigital(b) },
     image: { pattern: /\.fwu$/i, detect: (b) => bundleForBoard(b, 21316), parse: parseFpvosBundle,
       columns: ['Component', 'Size', 'Offset', 'Update flag'],

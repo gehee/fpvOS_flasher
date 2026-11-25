@@ -359,9 +359,9 @@ async function deviceModes() {
   console.log('--- Device modes: bridge and back, update mode, refusal, stock');
   const fail = [];
   const q = '?airFpvos=2026.10.beta5&modeLag=3';
-  // firmware before persistent bridge mode: no switch
+  // firmware before persistent bridge mode: no switch (Advanced has only the way back to stock)
   await connectedPage('?airFpvos=2026.10.beta4-44-g4372d89-dirty');
-  if (!await js("document.querySelector('#advanced').hidden")) fail.push('device mode switch shown on beta4-44');
+  if (!await js("document.querySelector('#device-mode').hidden")) fail.push('device mode switch shown on beta4-44');
   const flip = async (to, text) => {
     await js(`document.querySelector('#mode-${to}').click()`);
     await until("document.querySelector('#ask').open", 3000, `${to} confirm`);
@@ -403,6 +403,54 @@ async function deviceModes() {
   // stock's updater has no modes
   await connectedPage();
   if (!await js("document.querySelector('#advanced').hidden && document.querySelector('#update-mode').hidden")) fail.push('device modes shown for stock');
+  return fail;
+}
+
+// The way back to stock under Advanced: the Lite's bank switch on fpvOS from
+// 2026.11.beta1 (refused when an fpvOS update wrote over the stock bank, with
+// Caddx's update as the way instead), the reflash note on older fpvOS, the
+// restoration note on the standard VRX, nothing on stock.
+async function stockReturn() {
+  console.log('--- Back to stock: the Lite bank switch, its refusal, older fpvOS, the VRX');
+  const fail = [];
+  const card = () => js(`({ shown: !document.querySelector('#advanced').hidden && !document.querySelector('#stock-return').hidden,
+    note: document.querySelector('#stock-return-note').textContent, button: !document.querySelector('#stock-switch').hidden,
+    modes: !document.querySelector('#device-mode').hidden })`);
+  await connectedPage('?airFpvos=2026.10.beta4-113-g304b4c7');
+  let c = await card();
+  if (!c.shown || c.button || !/keeps no copy/.test(c.note)) fail.push(`older fpvOS stock card: ${JSON.stringify(c)}`);
+  const q = '?airFpvos=2026.11.beta1%2Bg304b4c79';
+  await connectedPage(q);
+  await js("document.querySelector('#advanced').open = true");
+  c = await card();
+  if (!c.shown || !c.button || !c.modes || !/still keeps stock on its other bank/.test(c.note)) fail.push(`Lite stock card: ${JSON.stringify(c)}`);
+  await shot('stock-return-lite');
+  const press = async () => {
+    await js("document.querySelector('#stock-switch').click()");
+    await until("document.querySelector('#ask').open", 3000, 'stock confirm');
+    if (!await js("document.querySelector('#ask-title').textContent === 'Switch to stock firmware?'")) fail.push('stock confirm title');
+    await js("document.querySelector('#ask-ok').click()");
+  };
+  await press();
+  await until("!document.querySelector('#start').hidden && document.querySelector('#start-note').textContent.includes('restarting into its stock firmware')", 5000, 'stock switch');
+  if (String(await js('window.__fake.rebootPayloads')) !== 'stock') fail.push(`stock requests: ${await js('window.__fake.rebootPayloads')}`);
+  await shot('stock-return-switched');
+  // an fpvOS update wrote over the stock bank: refused, Caddx's update instead
+  await connectedPage(`${q}&airOtherBank=fpvos`);
+  await js("document.querySelector('#advanced').open = true");
+  await press();
+  await until("!document.querySelector('#result').hidden", 5000, 'stock refusal');
+  if (!await js("document.querySelector('#result').dataset.ok === 'false' && /the other bank holds fpvOS/.test(document.querySelector('#result').textContent) && /Caddx's Ascent air unit update/.test(document.querySelector('#result').textContent) && !document.querySelector('#device').hidden")) fail.push('stock refusal');
+  await shot('stock-return-refused');
+  // the standard VRX on fpvOS: no switch, how to restore
+  await connectedPage('?device=fpvos');
+  c = await card();
+  if (!c.shown || c.button || c.modes || !/restoration bundle/.test(c.note)) fail.push(`VRX stock card: ${JSON.stringify(c)}`);
+  await js("document.querySelector('#advanced').open = true");
+  await shot('stock-return-vrx');
+  // stock: nothing
+  await connectedPage();
+  if (!await js("document.querySelector('#advanced').hidden")) fail.push('stock card shown on stock firmware');
   return fail;
 }
 
@@ -623,6 +671,7 @@ try {
   failures.push(...await catalogInstallStillStock());
   failures.push(...await testBuilds());
   failures.push(...await deviceModes());
+  failures.push(...await stockReturn());
   failures.push(...await p1OnFpvos());
   failures.push(...await looks());
 } catch (e) {

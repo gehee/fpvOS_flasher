@@ -675,6 +675,66 @@ async function switchDeviceMode(to) {
   render();
 }
 
+// Back to stock where the unit keeps it on its other bank (P1 Air,
+// SteadyDigital, and the Lite when fpvOS went on over stock): the updater's
+// "stock" request selects that bank and restarts. fpvOS stays on its own
+// bank, but only an install from this page starts it again. Units without a
+// stock copy are told how to get stock back.
+const CADDX_AIR_UPDATE = 'download Caddx\'s Ascent air unit update and install it here with Choose a local file: '
+  + 'it replaces fpvOS.';
+const STOCK_RETURN_NOTE = Object.freeze({
+  bank: 'The unit keeps its stock firmware on its other bank. Switching restarts it into stock; '
+    + 'to use fpvOS again, install it from this page.',
+  // the Lite: stock stays on the other bank after fpvOS went on over it, until an fpvOS update
+  'bank-if-kept': 'If fpvOS went on over the stock firmware, the unit still keeps stock on its other bank: switching '
+    + 'restarts it into stock, and to use fpvOS again you install it from this page. An fpvOS update writes over '
+    + 'that bank, and the unit then refuses; to go back to stock after one, ' + CADDX_AIR_UPDATE,
+  flash: 'This unit keeps no copy of its stock firmware. To go back to stock, ' + CADDX_AIR_UPDATE,
+  restore: 'fpvOS replaced this VRX\'s shared kernel and device tree, and the VRX keeps no copy of the stock ones '
+    + '(its stock system stays on its own bank). Going back to stock takes a restoration bundle made from backups '
+    + 'of those two partitions, taken before fpvOS went on, installed here with Choose a local file. Caddx\'s VRX '
+    + 'update cannot be installed here.',
+});
+const STOCK_SWITCH = new Set(['bank', 'bank-if-kept']);
+// A profile's stockReturn: a kind, or a function of what the unit reports.
+const stockReturnOf = (profile, info) => {
+  const r = profile?.meta.stockReturn;
+  return (typeof r === 'function' ? r(info ?? {}) : r) ?? null;
+};
+
+async function switchToStock() {
+  const session = state.session;
+  if (!session || state.busy || !STOCK_SWITCH.has(stockReturnOf(state.profile, state.info))) return;
+  if (!await ask('Switch to stock firmware?', 'The unit restarts into the stock firmware kept on its other bank. '
+    + 'fpvOS stays installed but does not start again until you install it from this page.', 'Switch to stock')) return;
+  if (state.session !== session || state.busy) return;
+  try {
+    const r = await state.profile.transport.protocol.deviceMode(session, 'stock');
+    if (r.status !== 0) {
+      const why = r.detail || `status ${r.status}`;
+      // the Lite says when its other bank holds no stock (an fpvOS update wrote over it)
+      const hint = /unsupported/.test(why) ? 'Its fpvOS is too old for this; install a newer fpvOS first.'
+        : /no (intact )?stock firmware/.test(why) ? 'To go back to stock, ' + CADDX_AIR_UPDATE : '';
+      state.flashed = { ok: false, text: `The unit refused to switch to stock: ${why}. ${hint}`.trim() };
+      log(`stock refused: ${why}`, 'error');
+      render();
+      return;
+    }
+    log(`the unit is switching to stock${r.detail ? ` (${r.detail})` : ''}`);
+  } catch (e) {
+    if (!(e instanceof LinkLostError)) {
+      state.flashed = { ok: false, text: `Switching to stock failed: ${e.message}` };
+      log(`stock: ${e.message}`, 'error');
+      render();
+      return;
+    }
+    log('the unit went away while switching to stock', 'warn');
+  }
+  state.notice = 'The unit is restarting into its stock firmware. To use fpvOS again, connect it and install fpvOS.';
+  await state.link?.close().catch(() => {});
+  render();
+}
+
 function ask(title, text, okLabel) {
   const d = $('ask');
   $('ask-title').textContent = title;
@@ -715,7 +775,12 @@ function render() {
   const deviceMode = state.session && state.profile?.transport.protocol.deviceMode ? deviceModeOf(state.info) : null;
   // the switch, under Advanced, on firmware that keeps bridge mode, and always
   // for a unit already in it: then the only way back, so Advanced opens
-  $('advanced').hidden = !(deviceMode === 'bridge' || deviceMode === 'normal' && state.profile.meta.deviceModes?.(state.info));
+  // installed fpvOS (normal mode): the way back to stock, also under Advanced;
+  // a unit whose fpvOS service has no device modes (the VRX) is always fpvOS
+  const onFpvos = deviceMode === 'normal' || !!state.session && !!info && !!state.profile
+    && !state.profile.transport.protocol.deviceMode && state.profile.meta.describe(info).fpvos;
+  const stockReturn = onFpvos ? stockReturnOf(state.profile, info) : null;
+  $('advanced').hidden = !(deviceMode === 'bridge' || deviceMode === 'normal' && state.profile.meta.deviceModes?.(state.info) || stockReturn);
   if (deviceMode === 'bridge' && $('advanced').dataset.mode !== 'bridge') $('advanced').open = true;
   $('advanced').dataset.mode = deviceMode ?? '';
   for (const to of ['normal', 'bridge']) {
@@ -723,6 +788,11 @@ function render() {
     $(`mode-${to}`).disabled = state.busy || state.connecting || !deviceModeRequest(deviceMode, to) && deviceMode !== to;
   }
   $('device-mode-note').textContent = DEVICE_MODE_ABOUT[deviceMode]?.() ?? '';
+  $('device-mode').hidden = !(deviceMode === 'bridge' || deviceMode === 'normal' && state.profile.meta.deviceModes?.(state.info));
+  $('stock-return').hidden = !stockReturn;
+  $('stock-return-note').textContent = STOCK_RETURN_NOTE[stockReturn] ?? '';
+  $('stock-switch').hidden = !STOCK_SWITCH.has(stockReturn);
+  $('stock-switch').disabled = state.busy || state.connecting;
   $('update-mode').hidden = deviceMode !== 'update';
   $('mode-restart').disabled = state.busy || state.connecting;
   $('firmware').hidden = deviceMode === 'bridge';
@@ -962,6 +1032,7 @@ function init() {
   $('netmode').onclick = networkMode;
   for (const to of ['normal', 'bridge']) $(`mode-${to}`).onclick = () => { if (deviceModeOf(state.info) !== to) switchDeviceMode(to); };
   $('mode-restart').onclick = () => switchDeviceMode('normal');
+  $('stock-switch').onclick = () => switchToStock();
   $('reselect').onclick = reselect;
   $('flash').onclick = go;
   $('release').onchange = () => pick($('release').value);

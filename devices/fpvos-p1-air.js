@@ -1,6 +1,6 @@
 // P1 source firmware, independent recovery and browser-only stock preparation.
 import { ASCENT_TRANSPORT, ASCENT_PROTOCOL, deviceModeOf } from '../transports/ascent.js';
-import { defineDevice } from './common.js';
+import { defineDevice, fpvosVersion } from './common.js';
 import { FPVOS_PREPARE, FPVOS_TRANSFER, FPVOS_INSTALL, FPVOS_REBOOT_VERIFY } from '../stages/fpvos.js';
 import { parseFpvosBundle, bundleForBoard } from './fpvos-bundle.js';
 import { enterP1Bootloader, prepareP1Recovery, loadP1Recovery, P1_STOCK_USB, P1_HID_FILTER, P1_STOCK_VERSIONS, P1_AUTO } from '../stages/p1-bootstrap.js';
@@ -14,9 +14,6 @@ export const parseP1Bundle = (bytes) => parseFpvosBundle(bytes, {
 export const matchesFpvosP1Air = (info) => info.name === 'fpvOS updater'
   && info.hardware === 'P1_SKY' && info.serial === 'fpvos-p1-air' && info.status === 0;
 
-// The updater's SDK field: the image's fpvOS version (git describe), from the
-// updater with board/p1-air/source-post-build.sh on; "development" before.
-const p1Version = (info) => (info.sdk && info.sdk !== 'development' ? `fpvOS ${info.sdk}` : 'fpvOS');
 
 export const FPVOS_P1_AIR = defineDevice({
   meta: {
@@ -27,12 +24,15 @@ export const FPVOS_P1_AIR = defineDevice({
     usb: [{ usbVendorId: 0x1d6b, usbProductId: 0x0104 }, { usbVendorId: 0x4152, usbProductId: 0x8030 },
       { usbVendorId: 0x1d6b, usbProductId: 0x8030 }],
     deviceVersion: () => null,
-    describe: (info) => ({ model: 'BETAFPV P1 Air', fpvos: true, firmware: p1Version(info) }),
+    describe: (info) => ({ model: 'BETAFPV P1 Air', fpvos: true, firmware: fpvosVersion(info) }),
     // normal and bridge mode where the updater names its mode; bridge mode is
     // not saved on the P1 (no SAVED_MODE in fpvOS_usb's p1-air board): a restart
     // brings it back in normal mode
     deviceModes: (info) => deviceModeOf(info) !== null,
     bridgeKept: false,
+    // stock stays on the other bank: the updater's "stock" request selects it
+    // and restarts (fpvos-update nand stock)
+    stockReturn: 'bank',
     preparation: Object.freeze({ enterBootloader: enterP1Bootloader, loadRecovery: prepareP1Recovery, loadAssets: loadP1Recovery,
       serialFilter: P1_STOCK_USB, hidFilter: P1_HID_FILTER, stockVersions: P1_STOCK_VERSIONS,
       // found by probing (1.0.44 has the v1 bootloader, 2.x the v2 one), v1 first

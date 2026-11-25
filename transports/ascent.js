@@ -394,8 +394,9 @@ export const ASCENT_PROTOCOL = Object.freeze({
   networkMode: (session) => session.request(CMD.NETWORK_MODE, EMPTY, { timeoutMs: 3000, retryMs: 0 }),
   // One REBOOT, never resent: a second "clean" or "bridge" is a second switch.
   // The reply is the updater's status and message (68 bytes).
+  // "stock" can take longer: the Ascent Lite reads its other bank through first.
   deviceMode: async (session, name) => {
-    const f = await session.request(CMD.REBOOT, rebootPayload(name), { timeoutMs: 8000, retryMs: 0 });
+    const f = await session.request(CMD.REBOOT, rebootPayload(name), { timeoutMs: name === 'stock' ? 30000 : 8000, retryMs: 0 });
     const p = f.payload;
     return { status: p.length >= 4 ? new DataView(p.buffer, p.byteOffset, p.length).getInt32(0, true) : -1,
       detail: cstr(p, 4, 64) };

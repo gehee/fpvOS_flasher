@@ -6,7 +6,7 @@
 // It installs a full fpvOS bundle or restores the original kernel/DTB.
 // The VRX Pro (RK3568) would need a profile of its own; none is written yet.
 import { ASCENT_TRANSPORT, ASCENT_PROTOCOL } from '../transports/ascent.js';
-import { defineDevice } from './common.js';
+import { defineDevice, fpvosVersion } from './common.js';
 import { FPVOS_PREPARE, FPVOS_TRANSFER, FPVOS_INSTALL, FPVOS_REBOOT_VERIFY } from '../stages/fpvos.js';
 import { SEND_LOCATION } from '../stages/location.js';
 
@@ -27,7 +27,11 @@ export const FPVOS_AR9311 = defineDevice({
     id: 'fpvos-ar9311', name: 'Ascent VRX · fpvOS', models: ['Ascent VRX · fpvOS'],
     usb: [{ usbVendorId: 0x1d6b, usbProductId: 0x0104 }],
     deviceVersion: () => null,
-    describe: () => ({ model: 'Caddx Ascent VRX', fpvos: true, firmware: 'fpvOS' }),
+    // stock's system stays on its bank, but fpvOS's kernel and device tree
+    // replaced the shared ones and no copy is kept: a restoration bundle
+    // from backups of those partitions (tools/fpvos-update --vendor-restore)
+    stockReturn: 'restore',
+    describe: (info) => ({ model: 'Caddx Ascent VRX', fpvos: true, firmware: fpvosVersion(info) }),
     identity: { matches: matchesFpvosAr9311, normalMatches: (a, b) => matchesFpvosAr9311(a) && matchesFpvosAr9311(b) },
     image: { pattern: /\.fwu$/i, detect: (b) => bundleForBoard(b, 485), parse: parseFpvosBundle,
       columns: ['Component', 'Size', 'Offset', 'Update flag'],

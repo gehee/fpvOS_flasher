@@ -121,7 +121,7 @@
         // ?airFpvos=VERSION: an air unit on fpvOS's updater (its version in the
         // SDK field), which keeps the unit's identity in update mode too
         // ?installsFpvos=VERSION: one once an image is installed (restarted into)
-        const airFpvos = type === 'air' && (params.get('airFpvos') || fake.fpvosInstalled);
+        const airFpvos = type === 'air' && !fake.stockBooted && (params.get('airFpvos') || fake.fpvosInstalled);
         const airClean = type === 'air' && this.mode === 'clean' && !airFpvos;
         return this.send(f, this.struct(300, (i32, str) => {
           i32(0, 1 << 20); str(4, airFpvos || (airClean ? '' : current.split('_').slice(-3).join('.'))); str(36, airClean ? 'Ascent' : factory.name); i32(100, airClean ? 0 : 51);
@@ -133,6 +133,17 @@
       }
       if (f.cmd === C.REBOOT) {
         const request = new TextDecoder().decode(f.payload).replace(/\0.*$/s, '');
+        // fpvOS's updater on an air unit: "stock", the other bank's stock from
+        // 2026.11 on; ?airOtherBank=fpvos: an fpvOS update wrote over it
+        if (type === 'air' && params.get('airFpvos') && !fake.stockBooted && request === 'stock') {
+          const m = /^(\d{4})\.(\d{1,2})/.exec(params.get('airFpvos'));
+          const why = !m || +m[1] * 12 + +m[2] <= 2026 * 12 + 10 ? 'stock return unsupported or preparation failed'
+            : params.get('airOtherBank') === 'fpvos' ? 'no stock firmware: the other bank holds fpvOS' : null;
+          this.send(f, this.struct(68, (i32, str) => { i32(0, why ? -1 : 0); str(4, why ?? 'rebooting into stock firmware'); }));
+          fake.rebootPayloads.push(request);
+          if (!why) { fake.stockBooted = true; reboot('normal'); }
+          return;
+        }
         // fpvOS's updater on an air unit: its device modes (fpvOS_usb), each a new
         // USB device; ?refuseMode=1 refuses them
         if (type === 'air' && params.get('airFpvos') && ['bridge', 'normal', 'reboot'].includes(request)
