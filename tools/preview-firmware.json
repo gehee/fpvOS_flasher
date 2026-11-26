@@ -27,18 +27,18 @@
     },
     {
       "name": "fpvos-p1-gnd-goggles-2026.11.beta1.fwu",
-      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/e5643e5124e53cc54a23cbbba1b15cdc522aafe8/fpvos-p1-gnd-goggles-2026.11.beta1.fwu",
-      "sha256": "87a6e818ebb505081994c150a5b42ae7adfe9a62e8f0f231103adb82e45de842"
+      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/97e6d29050719b7a444247a32e27e350767a7149/fpvos-p1-gnd-goggles-2026.11.beta1.fwu",
+      "sha256": "0e760de22062db5e0c2b2cdb34c08c9a9c43e6ed25eb4fa61c17c29603c26fd1"
     },
     {
       "name": "fpvos-p1-gnd-goggles-pro-2026.11.beta1.fwu",
-      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/e5643e5124e53cc54a23cbbba1b15cdc522aafe8/fpvos-p1-gnd-goggles-pro-2026.11.beta1.fwu",
-      "sha256": "5ec7d37b0df2bd1cf80edd058d6eea1cc501bd38d69cd92a22d165a68fb8f977"
+      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/97e6d29050719b7a444247a32e27e350767a7149/fpvos-p1-gnd-goggles-pro-2026.11.beta1.fwu",
+      "sha256": "33308d1a85bf94beaefeae6121094b33be77bf282ab31a0fd70d98f1b73cf833"
     },
     {
       "name": "fpvos-p1-gnd-vrx-2026.11.beta1.fwu",
-      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/e5643e5124e53cc54a23cbbba1b15cdc522aafe8/fpvos-p1-gnd-vrx-2026.11.beta1.fwu",
-      "sha256": "7716898cdf9c7f7b7a2b01af69c4cef38a93669d0164270a0e17a7fa46365e89"
+      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/97e6d29050719b7a444247a32e27e350767a7149/fpvos-p1-gnd-vrx-2026.11.beta1.fwu",
+      "sha256": "6462d0406c0159039f41b1334f618c98ceefd388953f6b72d4509af7afb2edb7"
     },
     {
       "name": "fpvos-steadydigital-2026.11.beta1.fwu",
