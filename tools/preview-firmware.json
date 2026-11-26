@@ -3,7 +3,10 @@
     "The preview page's release candidate, before it is an fpvOS release: the deploy",
     "(.github/workflows/pages.yml) downloads each file, checks its sha256, and lists it",
     "first in /preview/'s catalog, every board included (make-catalog.mjs --every-board).",
-    "The live page never reads this. Files: a gist, at a fixed revision."
+    "The live page never reads this. Files: two gists, each at a fixed revision: the",
+    "release candidate built at the 2026.11.beta1 tag, and the BETAFPV P1 ground units'",
+    "bundles, built from fpvOS f6de323 as 2026.11.beta1 (the first gist is full). The P1",
+    "ground bundles have not run on hardware."
   ],
   "release": "2026.11.beta1",
   "files": [
@@ -21,6 +24,21 @@
       "name": "fpvos-p1-air-2026.11.beta1.fwu",
       "url": "https://gist.githubusercontent.com/gehee/eb52744783c456b7f9101834ef99f82c/raw/e8a0804dfd8513dfa1c9bb3973a28bc66d83f0ef/fpvos-p1-air-2026.11.beta1.fwu",
       "sha256": "731b2a2c67d208a4d05d9a9a89841c885cd3ee3e9a501610073334a5cdc57f52"
+    },
+    {
+      "name": "fpvos-p1-gnd-goggles-2026.11.beta1.fwu",
+      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/e5643e5124e53cc54a23cbbba1b15cdc522aafe8/fpvos-p1-gnd-goggles-2026.11.beta1.fwu",
+      "sha256": "87a6e818ebb505081994c150a5b42ae7adfe9a62e8f0f231103adb82e45de842"
+    },
+    {
+      "name": "fpvos-p1-gnd-goggles-pro-2026.11.beta1.fwu",
+      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/e5643e5124e53cc54a23cbbba1b15cdc522aafe8/fpvos-p1-gnd-goggles-pro-2026.11.beta1.fwu",
+      "sha256": "5ec7d37b0df2bd1cf80edd058d6eea1cc501bd38d69cd92a22d165a68fb8f977"
+    },
+    {
+      "name": "fpvos-p1-gnd-vrx-2026.11.beta1.fwu",
+      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/e5643e5124e53cc54a23cbbba1b15cdc522aafe8/fpvos-p1-gnd-vrx-2026.11.beta1.fwu",
+      "sha256": "7716898cdf9c7f7b7a2b01af69c4cef38a93669d0164270a0e17a7fa46365e89"
     },
     {
       "name": "fpvos-steadydigital-2026.11.beta1.fwu",
