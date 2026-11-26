@@ -1,14 +1,18 @@
 // fpvOS uses the same framing, but different ACK text, completion and reboot rules.
-import { CMD, rebootPayload, encodeFileStart, parseFileAck, parseUpgradeStatus,
+import { CMD, cmdName, rebootPayload, encodeFileStart, parseFileAck, parseUpgradeStatus,
   sendFileChunks, sleep, withTimeout, TimeoutError } from '../transports/ascent.js';
 import { AR9311_BOOTSTRAP } from './ar9311-bootstrap.js';
 
 async function control(ctx, cmd, payload) {
   const f = await ctx.session.request(cmd, payload, { retryMs: 0, timeoutMs: 30000 });
-  if (!f.crcOk || f.payload.length !== 68 || new DataView(f.payload.buffer, f.payload.byteOffset).getInt32(0, true) !== 0) {
-    throw new Error('fpvOS control request rejected or damaged.');
+  const detail = f.payload.length >= 4 ? new TextDecoder().decode(f.payload.subarray(4, 68)).replace(/\0.*$/s, '') : '';
+  if (!f.crcOk || f.payload.length !== 68) {
+    throw new Error(`fpvOS ${cmdName(cmd)} reply damaged (${f.crcOk ? `${f.payload.length} bytes` : 'bad CRC'}).`);
   }
-  return new TextDecoder().decode(f.payload.subarray(4)).replace(/\0.*$/s, '');
+  const status = new DataView(f.payload.buffer, f.payload.byteOffset).getInt32(0, true);
+  // the unit's own reason, e.g. "clean-mode preparation failed" or "invalid size or destination"
+  if (status !== 0) throw new Error(`fpvOS refused ${cmdName(cmd)} (status ${status}): ${detail || 'no reason given'}.`);
+  return detail;
 }
 
 async function reconnect(ctx, usb = ctx.profile.meta.usb, matches = ctx.profile.meta.identity.matches) {
