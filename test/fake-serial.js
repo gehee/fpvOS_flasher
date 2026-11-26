@@ -13,7 +13,7 @@
   const rejectData = params.has('rejectData');
   const installFailure = params.has('installFailure');
   const VID = type === 'air' ? 0x1d76 : 0x1d75;
-  let custom = type === 'fpvos' || type === 'p1';
+  let custom = type === 'fpvos' || type === 'p1' || type === 'p1gnd';   // p1gnd: a P1 ground unit on fpvOS's updater
   const stockP1 = type === 'p1stock' || type === 'sdstock';   // a stock P1 / SteadyDigital on its Sirius serial port, not yet fpvOS
   const stockPid = type === 'sdstock' ? 0x0210 : 0x0101;
   const name = type === 'air' ? 'Ascent_H_Sky' : type === 'vrx' ? 'Ascent_VRX' : 'Ascent_VRX_Pro';
@@ -115,7 +115,7 @@
           i32(0, 1 << 20); str(4, type === 'p1' && params.get('p1Version') || 'development'); str(36, 'fpvOS updater');
           if (type === 'p1' && params.get('p1Temp')) i32(100, Number(params.get('p1Temp')));
           str(104, /^[a-f0-9]{64}$/.test(firmware) ? firmware : 'fpvOS unsigned development updates');
-          str(168, type === 'p1' ? 'fpvos-p1-air' : 'fpvos-ar9311'); str(200, type === 'p1' ? 'P1_SKY' : 'Gnd485'); str(236, { clean: 'clean RAM mode', bridge: 'bridge mode' }[this.mode] ?? 'normal mode');
+          str(168, type === 'p1' ? 'fpvos-p1-air' : type === 'p1gnd' ? 'fpvos-p1-gnd' : 'fpvos-ar9311'); str(200, type === 'p1' ? 'P1_SKY' : type === 'p1gnd' ? 'P1_GND' : 'Gnd485'); str(236, { clean: 'clean RAM mode', bridge: 'bridge mode' }[this.mode] ?? 'normal mode');
         }));
         const current = this.mode === 'unlocked' && !params.has('unlockFails') ? 'Ascent_G_Gnd_0_0_0' : firmware;
         // ?airFpvos=VERSION: an air unit on fpvOS's updater (its version in the

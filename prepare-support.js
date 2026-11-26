@@ -29,15 +29,21 @@ export function browserPrepareSupport(userAgent = '') {
 // the browser path already works (Linux/ChromeOS) or there is no build (other).
 // The apps live in their own repo, fpvOS_recovery, whose recovery-app workflow
 // publishes them as release assets; the file names below must match that
-// workflow's output. Both names are fixed, so the latest release is always the
-// download, with nothing to change here per release.
+// workflow's output. Both names are fixed, so the latest release is the
+// download, with nothing to change here per release - unless this commit names
+// a release of its own (RECOVERY_APP_RELEASE): a branch that needs an app the
+// latest one is not (the alpha page: the P1 ground units' recovery, in a
+// prerelease that never becomes latest). Back to null before it reaches main.
+export const RECOVERY_APP_RELEASE = 'recovery-app-v0.5.0-alpha1';
 // Served from localhost (e.g. local testing over an SSH tunnel), take the apps
 // from ./recovery-app/ beside the page instead, so the download works without a
 // published release.
 const RECOVERY_APP_BASE =
   (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1|::1)$/.test(location.hostname))
     ? 'recovery-app'
-    : 'https://github.com/gehee/fpvOS_recovery/releases/latest/download';
+    : RECOVERY_APP_RELEASE
+      ? `https://github.com/gehee/fpvOS_recovery/releases/download/${RECOVERY_APP_RELEASE}`
+      : 'https://github.com/gehee/fpvOS_recovery/releases/latest/download';
 
 export function recoveryAppUrl(file) {
   return `${RECOVERY_APP_BASE}/${file}`;

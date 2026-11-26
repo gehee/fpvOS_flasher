@@ -55,7 +55,7 @@ repeatedly flash unverified images. This does not recover damaged SPL/U-Boot.
 Source and assets
 -----------------
 Kernel and DTB: https://github.com/gehee/fpvOS
-Commit: f57977d2e94ea24fa2e3510e9485ecb8b39b56d7 (manifest.json source_commit), unmodified.
+Commit: 55e29a35a255080d2418118bf998d6ef6cca86cf (manifest.json source_commit), unmodified.
 Build: ./build.sh p1-air-source && ./build.sh p1-air-source recovery
 Files: output/p1-air-source/images/kernel-recovery.img (shipped here as
 kernel.img) and betafpv-p1-air.dtb

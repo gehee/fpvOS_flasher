@@ -4,7 +4,7 @@ import { sameFactoryIdentity } from '../devices/common.js';
 import { uploadBootstrapBinary, uploadUnfinalized, CMD, rebootPayload, withTimeout, LinkLostError, TimeoutError } from '../transports/ascent.js';
 
 export const BOOTSTRAP_BASE = new URL('../assets/ar9311-updater/v3/', import.meta.url);
-export const BOOTSTRAP_MANIFEST_SHA256 = 'f23131119802ee80745a800b5d6aa08569aacefb443fe7a4a700e1bb434d8850';
+export const BOOTSTRAP_MANIFEST_SHA256 = '1701c4940167599895a287cb15275c8ea1a4ea4f1dfeff5913bc048103afed26';
 export const BOOTSTRAP_STOCK_VERSIONS = Object.freeze(['17.5.3', '17.5.8', '18.21.10']);
 export const BOOTSTRAP_USB = Object.freeze([{ usbVendorId: 0x1d6b, usbProductId: 0x0104 }]);
 const allowsUsb = (info) => BOOTSTRAP_USB.some((u) => u.usbVendorId === info?.usbVendorId && u.usbProductId === info?.usbProductId);

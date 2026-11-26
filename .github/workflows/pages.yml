@@ -2,24 +2,28 @@ name: pages
 
 # Tests every push to main and every pull request. Publishes to GitHub Pages,
 # which serves it over https as Web Serial needs, the commit the `live` tag
-# points to at the root, and the commit the `preview` tag points to at
-# /preview/ (index.html, application modules, assets and fonts; not the tests).
-# main moves on without changing either page. Every deploy rebuilds both, so a
-# push of one tag keeps the other; deleting `preview` takes /preview/ down.
+# points to at the root, the commit the `preview` tag points to at /preview/
+# and the commit the `alpha` tag points to at /alpha/ (index.html, application
+# modules, assets and fonts; not the tests). main moves on without changing
+# any page. Every deploy rebuilds them all, so a push of one tag keeps the
+# others; deleting `preview` or `alpha` takes its page down.
 #   git tag -f live <commit> && git push -f origin live
 #   git tag -f preview <commit> && git push -f origin preview
+#   git tag -f alpha <commit> && git push -f origin alpha
 #   git push origin --delete preview
 # A tag push runs this file as it is in the tagged commit: a commit without
 # these triggers (an older one, a fork's pull request) is published by hand:
 #   gh workflow run pages.yml --ref main
+# and a commit whose copy of this file knows fewer pages publishes only those:
+# after tagging one (a `live` from before /alpha/, say), run it by hand too.
 # One-time setup: Settings > Pages > Build and deployment > Source: GitHub Actions;
 # Settings > Environments > github-pages > Deployment branches and tags: main and
-# the tags `live` and `preview`.
+# the tags `live`, `preview` and `alpha`.
 
 on:
   push:
     branches: [main]
-    tags: [live, preview]
+    tags: [live, preview, alpha]
   pull_request:
   workflow_dispatch:
   delete:
@@ -38,17 +42,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --test test/test.mjs test/archive.test.mjs test/profiles.test.mjs test/unlock.test.mjs test/fpvos.test.mjs test/bootstrap.test.mjs test/p1-bootstrap.test.mjs test/location.test.mjs test/hardware-matrix.test.mjs test/steadydigital-prepare.test.mjs test/prepare-support.test.mjs
+      - run: node --test test/test.mjs test/archive.test.mjs test/profiles.test.mjs test/unlock.test.mjs test/fpvos.test.mjs test/bootstrap.test.mjs test/p1-bootstrap.test.mjs test/location.test.mjs test/hardware-matrix.test.mjs test/steadydigital-prepare.test.mjs test/prepare-support.test.mjs test/catalog-units.test.mjs
       - name: P1 recovery image
         run: |
           python3 tools/package-p1-recovery.py --check
+          python3 tools/package-p1-gnd-recovery.py --check
       - name: Browser integration (simulated devices)
         run: node test/browser-check.mjs
 
   build:
-    # a push of `live` or `preview` once its tests pass, a run by hand, or the
-    # deletion of `preview` (test skipped)
-    if: ${{ !failure() && !cancelled() && (github.ref == 'refs/tags/live' || github.ref == 'refs/tags/preview' || github.event_name == 'workflow_dispatch' || (github.event_name == 'delete' && github.event.ref_type == 'tag' && github.event.ref == 'preview')) }}
+    # a push of `live`, `preview` or `alpha` once its tests pass, a run by hand,
+    # or the deletion of `preview` or `alpha` (test skipped)
+    if: ${{ !failure() && !cancelled() && (github.ref == 'refs/tags/live' || github.ref == 'refs/tags/preview' || github.ref == 'refs/tags/alpha' || github.event_name == 'workflow_dispatch' || (github.event_name == 'delete' && github.event.ref_type == 'tag' && (github.event.ref == 'preview' || github.event.ref == 'alpha'))) }}
     needs: test
     runs-on: ubuntu-24.04
     permissions:
@@ -58,7 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # every tag, so live and preview are both at hand
+          fetch-depth: 0   # every tag, so live, preview and alpha are all at hand
       - name: Site
         # every tracked file of each tagged commit but the tests, docs, tools and
         # repository files, so the step fits whatever layout that commit has; a
@@ -75,9 +80,11 @@ jobs:
             fi
           }
           publish refs/tags/live _site
-          if git rev-parse -q --verify refs/tags/preview >/dev/null; then
-            publish refs/tags/preview _site/preview
-          fi
+          for page in preview alpha; do
+            if git rev-parse -q --verify "refs/tags/$page" >/dev/null; then
+              publish "refs/tags/$page" "_site/$page"
+            fi
+          done
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -87,8 +94,9 @@ jobs:
         # on GitHub's asset host), so they are published next to the pages.
         # /preview/ lists first the release candidate the preview commit names
         # in tools/preview-firmware.json (each file checked against its
-        # sha256, every board offered), then the same releases. The live page
-        # never reads it.
+        # sha256, every board offered), then the same releases; /alpha/ does
+        # the same from the alpha commit's tools/alpha-firmware.json. The live
+        # page reads neither.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -105,20 +113,21 @@ jobs:
             done
           }
           releases _site/firmware
-          if [ -d _site/preview ]; then
-            if git show refs/tags/preview:tools/preview-firmware.json > "$RUNNER_TEMP/preview.json" 2>/dev/null; then
-              candidate=$(jq -r .release "$RUNNER_TEMP/preview.json")
-              mkdir -p "$RUNNER_TEMP/preview-fw"
-              jq -r '.files[] | "\(.url) \(.sha256) \(.name)"' "$RUNNER_TEMP/preview.json" |
+          for page in preview alpha; do
+            [ -d "_site/$page" ] || continue
+            if git show "refs/tags/$page:tools/$page-firmware.json" > "$RUNNER_TEMP/$page.json" 2>/dev/null; then
+              candidate=$(jq -r .release "$RUNNER_TEMP/$page.json")
+              mkdir -p "$RUNNER_TEMP/$page-fw"
+              jq -r '.files[] | "\(.url) \(.sha256) \(.name)"' "$RUNNER_TEMP/$page.json" |
                 while read -r url sum name; do
                   case "$name" in */*|.*|'') echo "bad file name: $name"; exit 1 ;; esac
-                  curl -sfL --retry 3 -o "$RUNNER_TEMP/preview-fw/$name" "$url"
-                  echo "$sum  $RUNNER_TEMP/preview-fw/$name" | sha256sum -c -
+                  curl -sfL --retry 3 -o "$RUNNER_TEMP/$page-fw/$name" "$url"
+                  echo "$sum  $RUNNER_TEMP/$page-fw/$name" | sha256sum -c -
                 done
-              node tools/make-catalog.mjs --every-board --release "$candidate" --out _site/preview/firmware "$RUNNER_TEMP/preview-fw"/*
+              node tools/make-catalog.mjs --every-board --release "$candidate" --out "_site/$page/firmware" "$RUNNER_TEMP/$page-fw"/*
             fi
-            releases _site/preview/firmware
-          fi
+            releases "_site/$page/firmware"
+          done
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v5
         with:

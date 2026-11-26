@@ -96,9 +96,9 @@ const airUpdateMatches = (current, before, phase) => matchesAir(before) && (airN
 
 // fpvOS's updater says which device mode the unit is in; the stock one says OK.
 // Its firmware field keeps stock's name for the PC tool; its own version is in
-// the SDK field (from fpvOS 3a8bff1's updater on; earlier ones leave it empty).
+// the SDK field (from fpvOS 97a7383's updater on; earlier ones leave it empty).
 const runsFpvos = (info) => /^(normal|bridge|clean RAM) mode$/.test(info.detail ?? '');
-// Bridge mode kept across reboots came with fpvOS 2026.10.beta4-45 (537b17a):
+// Bridge mode kept across reboots came with fpvOS 2026.10.beta4-45 (46cc204):
 // the device mode switch is offered from there, beta5 and every later release.
 // The version as parseFpvosVersion reads it (common.js).
 export function keepsBridgeMode(info) {

@@ -289,6 +289,8 @@
   dialog h3 { margin: 0 0 8px; font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
   dialog p { margin: 0; color: var(--quiet); }
   .ask-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+  .unit-choice-options { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  .unit-choice-options button { text-align: left; }
 
   [hidden] { display: none !important; }
 
@@ -321,7 +323,7 @@
   <section class="panel" id="start">
     <h1>Install fpvOS on your device</h1>
     <p class="lead">Plug your device into this computer with a USB cable, then press Connect.</p>
-    <div class="supported"><span class="label">SUPPORTED</span><ul id="devices"><li>Caddx Ascent Lite / Lite+</li><li>Caddx Ascent VRX</li><li>BETAFPV P1 Air</li><li>Skyzone SteadyDigital</li></ul></div>
+    <div class="supported"><span class="label">SUPPORTED</span><ul id="devices"><li>Caddx Ascent Lite / Lite+</li><li>Caddx Ascent VRX</li><li>BETAFPV P1 Air</li><li>BETAFPV VR04 goggles / P1 HD VRX (experimental)</li><li>Skyzone SteadyDigital</li></ul></div>
     <div id="start-note" class="notice" hidden></div>
     <button id="connect" class="solid big">Connect</button>
     <!-- shown once Connect finds a stock P1: it needs preparing before fpvOS can go on -->
@@ -509,6 +511,16 @@
     <div class="ask-buttons">
       <button value="cancel">Cancel</button>
       <button value="ok" id="ask-ok" class="solid"></button>
+    </div>
+  </form>
+</dialog>
+<dialog id="unit-choice">
+  <form method="dialog">
+    <h3 id="unit-choice-title"></h3>
+    <p id="unit-choice-text"></p>
+    <div class="unit-choice-options" id="unit-choice-options"></div>
+    <div class="ask-buttons">
+      <button value="cancel">Cancel</button>
     </div>
   </form>
 </dialog>

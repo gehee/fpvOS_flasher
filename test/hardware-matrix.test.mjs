@@ -9,10 +9,10 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import {
   PROFILES, USB_FILTERS, CONNECT_FILTERS, getProfile, profileForUsb, profilesForUsb,
-  profileForDevice, profileForImage, preparationForUsb,
+  profileForDevice, profileForImage, preparationsForUsb,
 } from '../devices/index.js';
 import {
-  P1_RAM_FILES, STEADYDIGITAL_RAM_FILES, P1_STOCK_USB, STEADYDIGITAL_STOCK_USB, P1_HID_FILTER,
+  P1_RAM_FILES, P1_GND_RAM_FILES, STEADYDIGITAL_RAM_FILES, P1_STOCK_USB, STEADYDIGITAL_STOCK_USB, P1_HID_FILTER,
 } from '../transports/p1-hid.js';
 import { crc32 } from '../transports/ascent.js';
 
@@ -31,16 +31,19 @@ const HARDWARE = {
     usb: { usbVendorId: 0x1d6b, usbProductId: 0x0104 } },
   'fpvos-p1-air': { info: { ...FPVOS_INFO, hardware: 'P1_SKY', serial: 'fpvos-p1-air' },
     usb: { usbVendorId: 0x1d6b, usbProductId: 0x0104 } },
+  'fpvos-p1-gnd': { info: { ...FPVOS_INFO, hardware: 'P1_GND', serial: 'fpvos-p1-gnd' },
+    usb: { usbVendorId: 0x1d6b, usbProductId: 0x0104 } },
   'fpvos-steadydigital': { info: { ...FPVOS_INFO, hardware: 'SteadyDigital', serial: 'fpvos-steadydigital' },
     usb: { usbVendorId: 0x1d6b, usbProductId: 0x0104 } },
 };
-const BOARD_IDS = { 'fpvos-ar9311': 485, 'fpvos-p1-air': 1345409867, 'fpvos-steadydigital': 21316 };
+const BOARD_IDS = { 'fpvos-ar9311': 485, 'fpvos-p1-air': 1345409867, 'fpvos-p1-gnd': 1345406788, 'fpvos-steadydigital': 21316 };
 const FPVOS_SHARED_USB = { usbVendorId: 0x1d6b, usbProductId: 0x0104 };
 
 function bundle(board) {
   const names = { 485: ['kernel.img', 'ascent-gnd485.dtb', 'rootfs.cpio.uboot'],
     21316: ['kernel.img', 'skyzone-steadydigital.dtb', 'rootfs.squashfs'],
-    1345409867: ['kernel.img', 'betafpv-p1-air.dtb', 'rootfs.cpio.gz'] }[board];
+    1345409867: ['kernel.img', 'betafpv-p1-air.dtb', 'rootfs.cpio.gz'],
+    1345406788: ['kernel.img', 'p1-gnd.dtb', 'rootfs.cpio.gz'] }[board];
   const payloads = [Buffer.from('kernel'), Buffer.from('dtb'), Buffer.from('root')];
   const h = Buffer.alloc(512);
   h.write('FPVOSUP1');
@@ -84,7 +87,7 @@ test('every board is recognised by its own FIND_DEVICE reply and by nobody else'
 });
 
 test('fpvOS replies must carry the exact hardware, serial, name and a zero status', () => {
-  for (const id of ['fpvos-ar9311', 'fpvos-p1-air', 'fpvos-steadydigital']) {
+  for (const id of ['fpvos-ar9311', 'fpvos-p1-air', 'fpvos-p1-gnd', 'fpvos-steadydigital']) {
     const { info, usb } = HARDWARE[id];
     for (const change of [{ hardware: 'Other' }, { serial: 'fpvos-other' }, { name: 'Ascent_VRX' }, { status: -1 }, { hardware: '' }]) {
       assert.equal(profileForDevice({ ...info, ...change }, usb), null, `${id} ${JSON.stringify(change)}`);
@@ -96,9 +99,9 @@ test('fpvOS replies must carry the exact hardware, serial, name and a zero statu
   }
 });
 
-test('USB IDs choose a transport only: the shared fpvOS ID is claimed by exactly the three fpvOS boards', () => {
+test('USB IDs choose a transport only: the shared fpvOS ID is claimed by exactly the fpvOS boards', () => {
   assert.deepEqual(profilesForUsb(FPVOS_SHARED_USB).map((p) => p.meta.id).sort(),
-    ['fpvos-ar9311', 'fpvos-p1-air', 'fpvos-steadydigital']);
+    ['fpvos-ar9311', 'fpvos-p1-air', 'fpvos-p1-gnd', 'fpvos-steadydigital']);
   assert.equal(profileForUsb(HARDWARE['ascent-vrx'].usb), getProfile('ascent-vrx'));
   assert.equal(profileForUsb(HARDWARE['ascent-air'].usb), getProfile('ascent-air'));
   assert.equal(profileForUsb({ usbVendorId: 0x1d6b, usbProductId: 0x0210 }), null, 'a stock SteadyDigital is not an fpvOS device');
@@ -136,12 +139,17 @@ test('each fpvOS board accepts only its own bundle, and rejects the other boards
   }
 });
 
-test('stock preparation: each board owns its own Sirius port and no two boards share one', () => {
-  const p1 = getProfile('fpvos-p1-air'), sd = getProfile('fpvos-steadydigital');
-  assert.equal(preparationForUsb(P1_STOCK_USB), p1);
-  assert.equal(preparationForUsb(STEADYDIGITAL_STOCK_USB), sd);
-  assert.equal(preparationForUsb({ usbVendorId: 0x1d6b, usbProductId: 0x0104 }), null, 'an fpvOS unit is not prepared');
-  for (const [p, usb] of [[p1, P1_STOCK_USB], [sd, STEADYDIGITAL_STOCK_USB]]) {
+test('stock preparation: a Sirius port names its board, or every unit it may be', () => {
+  const p1 = getProfile('fpvos-p1-air'), gnd = getProfile('fpvos-p1-gnd'), sd = getProfile('fpvos-steadydigital');
+  // every stock P1 is 1d6b:0101: the air unit and the ground units, a recovery each;
+  // which ground unit is not a choice (the unit tells itself apart)
+  const p1s = preparationsForUsb(P1_STOCK_USB);
+  assert.deepEqual(p1s.map((c) => [c.profile.meta.id, c.unit, c.ui.name]), [
+    ['fpvos-p1-air', null, 'BETAFPV P1 Air'],
+    ['fpvos-p1-gnd', null, 'BETAFPV VR04 goggles or P1 HD VRX']]);
+  assert.deepEqual(preparationsForUsb(STEADYDIGITAL_STOCK_USB).map((c) => [c.profile, c.unit]), [[sd, null]]);
+  assert.deepEqual(preparationsForUsb({ usbVendorId: 0x1d6b, usbProductId: 0x0104 }), [], 'an fpvOS unit is not prepared');
+  for (const [p, usb] of [[p1, P1_STOCK_USB], [gnd, P1_STOCK_USB], [sd, STEADYDIGITAL_STOCK_USB]]) {
     const prep = p.meta.preparation;
     assert.deepEqual(prep.serialFilter, usb, p.meta.id);
     assert.equal(prep.hidFilter, P1_HID_FILTER, p.meta.id);
@@ -150,10 +158,15 @@ test('stock preparation: each board owns its own Sirius port and no two boards s
     // detected where there is more than one version, else that one
     if (prep.stockVersion === 'auto') assert.ok(prep.stockVersions.length > 1, `${p.meta.id} detects its stock version`);
     else assert.ok(prep.stockVersions.includes(prep.stockVersion), `${p.meta.id} default stock version is a supported one`);
-    for (const k of ['name', 'title', 'confirm', 'ask', 'restart', 'load', 'serialName']) assert.ok(prep.ui[k], `${p.meta.id} ui.${k}`);
   }
-  const ports = PROFILES.filter((p) => p.meta.preparation).map((p) => usbKey(p.meta.preparation.serialFilter));
-  assert.equal(new Set(ports).size, ports.length, 'unique stock ports');
+  // every choice Connect can offer has its own complete wording, and a name no other has
+  const choices = [...p1s, ...preparationsForUsb(STEADYDIGITAL_STOCK_USB)];
+  for (const c of choices) for (const k of ['name', 'title', 'confirm', 'ask', 'restart', 'load', 'serialName']) assert.ok(c.ui[k], `${c.ui.name} ui.${k}`);
+  assert.equal(new Set(choices.map((c) => c.ui.name)).size, choices.length, 'unique names');
+  // one recovery for every ground unit, its device tree the one for any of them
+  assert.equal(gnd.meta.preparation.units, undefined);
+  assert.deepEqual(Object.keys(P1_GND_RAM_FILES), ['kernel.img', 'betafpv-p1-gnd.dtb', 'recovery-initrd.img']);
+  assert.deepEqual(Object.values(P1_GND_RAM_FILES), Object.values(P1_RAM_FILES));
   assert.ok(CONNECT_FILTERS.map(usbKey).includes(usbKey(STEADYDIGITAL_STOCK_USB)), 'Connect offers the stock SteadyDigital');
   // boards without a browser stock path (Ascent) never claim a Sirius port
   for (const id of ['ascent-air', 'ascent-vrx', 'fpvos-ar9311']) assert.equal(getProfile(id).meta.preparation, undefined, id);
@@ -178,6 +191,7 @@ const manifest = (dir) => JSON.parse(read(`${dir}/manifest.json`).toString());
 for (const [name, dir, ramFiles, board] of [
   ['P1 Air', 'assets/p1-updater/browser-v1', P1_RAM_FILES, 1345409867],
   ['SteadyDigital', 'assets/steadydigital-updater/browser-v1', STEADYDIGITAL_RAM_FILES, 21316],
+  ['P1 ground', 'assets/p1-gnd-updater/browser-v1', P1_GND_RAM_FILES, 1345406788],
 ]) {
   test(`${name} browser recovery assets match their manifest, RAM layout and bootloader fingerprints`, () => {
     const m = manifest(dir);
@@ -206,6 +220,9 @@ test('the P1 Air keeps its v1 and v2 bootloader fingerprints; SteadyDigital ship
   // the SteadyDigital reuses the P1 v2 bootloader verbatim
   assert.deepEqual(manifest('assets/steadydigital-updater/browser-v1').bootloaders.v2,
     manifest('assets/p1-updater/browser-v1').bootloaders.v2);
+  // the P1 ground units have the air unit's two bootloaders (the vendor's packages agree)
+  assert.deepEqual(manifest('assets/p1-gnd-updater/browser-v1').bootloaders,
+    manifest('assets/p1-updater/browser-v1').bootloaders);
 });
 
 test('the AR9311 (Ascent VRX fpvOS) v3 bootstrap files match their manifest', () => {

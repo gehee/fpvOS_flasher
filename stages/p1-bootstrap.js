@@ -1,10 +1,12 @@
 // Fetch and verify all recovery assets before any bootloader RAM modification.
-import { P1HidRecovery, P1_RAM_FILES, STEADYDIGITAL_RAM_FILES, p1Bootloader, sha256 } from '../transports/p1-hid.js';
-export { enterP1Bootloader, enterSteadyDigitalBootloader, P1_STOCK_USB, STEADYDIGITAL_STOCK_USB, P1_HID_FILTER, P1_STOCK_VERSIONS, P1_AUTO } from '../transports/p1-hid.js';
+import { P1HidRecovery, P1_RAM_FILES, P1_GND_RAM_FILES, STEADYDIGITAL_RAM_FILES, p1Bootloader, sha256 } from '../transports/p1-hid.js';
+export { enterP1Bootloader, enterSteadyDigitalBootloader, P1_STOCK_USB, STEADYDIGITAL_STOCK_USB, P1_HID_FILTER, P1_STOCK_VERSIONS, P1_GND_STOCK_VERSIONS, P1_AUTO } from '../transports/p1-hid.js';
 export const P1_RECOVERY_BASE = new URL('../assets/p1-updater/browser-v1/', import.meta.url);
-export const P1_RECOVERY_MANIFEST_SHA256 = '803da31a63e6bc34d1b4054c10dbfdf5965f190c5ed702c85cb7fe0d8a09a258';
+export const P1_RECOVERY_MANIFEST_SHA256 = '0e67849fc275e1a341a104eb662e881c2b70b235976c9b9ebee051fa75220e5b';
+export const P1_GND_RECOVERY_BASE = new URL('../assets/p1-gnd-updater/browser-v1/', import.meta.url);
+export const P1_GND_RECOVERY_MANIFEST_SHA256 = '8398175b06463cf9358de6fb559dfebc9f52fc7e952b9c7bc126f89c827a4a2d';
 export const STEADYDIGITAL_RECOVERY_BASE = new URL('../assets/steadydigital-updater/browser-v1/', import.meta.url);
-export const STEADYDIGITAL_RECOVERY_MANIFEST_SHA256 = '08fd97e3c51b65a894d4852d206eb0f1a15c2d6cbf2d01269fea169483c25516';
+export const STEADYDIGITAL_RECOVERY_MANIFEST_SHA256 = '6b8f2b1e2ef8bf5603db10e0767177ce2c9daf93a45215ad8829bc04804f46f3';
 async function fetchBytes(name, limit, fetcher, signal, base = P1_RECOVERY_BASE) {
   const response = await fetcher(new URL(name, base), { signal, cache: 'no-store' });
   if (!response.ok) throw new Error(`Cannot load P1 recovery ${name}: HTTP ${response.status}.`);
@@ -38,14 +40,20 @@ async function loadRecovery({ label, base, manifestSha256, boardId, ramFiles, fe
 }
 export const loadP1Recovery = ({ fetcher = globalThis.fetch, signal } = {}) => loadRecovery({ label: 'P1', base: P1_RECOVERY_BASE,
   manifestSha256: P1_RECOVERY_MANIFEST_SHA256, boardId: 1345409867, ramFiles: P1_RAM_FILES, fetcher, signal });
+// The P1 ground units share one recovery set, device tree included.
+export const loadP1GndRecovery = ({ fetcher = globalThis.fetch, signal } = {}) => loadRecovery({ label: 'P1 ground', base: P1_GND_RECOVERY_BASE,
+  manifestSha256: P1_GND_RECOVERY_MANIFEST_SHA256, boardId: 1345406788, ramFiles: P1_GND_RAM_FILES, fetcher, signal });
 export const loadSteadyDigitalRecovery = ({ fetcher = globalThis.fetch, signal } = {}) => loadRecovery({ label: 'SteadyDigital', base: STEADYDIGITAL_RECOVERY_BASE,
   manifestSha256: STEADYDIGITAL_RECOVERY_MANIFEST_SHA256, boardId: 21316, ramFiles: STEADYDIGITAL_RAM_FILES, fetcher, signal });
-export async function prepareP1Recovery(device, { stockVersion, signal, fetcher, assets: preloaded, progress = () => {}, log = () => {} } = {}) {
+export const prepareP1Recovery = (device, options = {}) => prepareP1(device, options, P1_RAM_FILES, loadP1Recovery);
+// The same bootloaders and steps as the P1 Air, with the ground recovery set.
+export const prepareP1GndRecovery = (device, options = {}) => prepareP1(device, options, P1_GND_RAM_FILES, loadP1GndRecovery);
+async function prepareP1(device, { stockVersion, signal, fetcher, assets: preloaded, progress = () => {}, log = () => {}, readTimeout, commandPause }, ramFiles, load) {
   // 'auto' (P1_AUTO): the bootloader is found by probing, v1 first.
   const { candidates } = p1Bootloader(stockVersion);
   progress('Downloading and checking P1 recovery…');
-  const assets = preloaded ?? await loadP1Recovery({ fetcher, signal });
-  const link = new P1HidRecovery(device, { stockVersion, signal, log,
+  const assets = preloaded ?? await load({ fetcher, signal });
+  const link = new P1HidRecovery(device, { stockVersion, ramFiles, signal, log, ...(readTimeout && { readTimeout }), ...(commandPause != null && { commandPause }),
     progress: ({ bytes, total }) => progress(`Loading P1 recovery: ${Math.round(bytes * 100 / total)}%`) });
   try {
     await link.open(); progress('Checking the P1 bootloader…');

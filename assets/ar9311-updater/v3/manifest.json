@@ -4,7 +4,7 @@
   "board": "ar9311",
   "board_id": 485,
   "source": "https://github.com/gehee/fpvOS",
-  "source_commit": "5c55cfb039d30568a56726d96a917ceb1ed36546",
+  "source_commit": "e4b1ff78be24b87c64171626f0a82fe7b21f4044",
   "supported_stock_firmware": ["17.5.3", "17.5.8", "18.21.10"],
   "files": {
     "fpvos-update-ar9311": {

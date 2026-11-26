@@ -11,7 +11,9 @@
 // chosen file or a test build. A stock-to-fpvOS VRX bundle would be offered to
 // stock VRXs too (the page uploads the RAM updater first, as for a chosen
 // file) once both are listed. Each device's image goes in a folder of its own:
-// every .fwu is sent as fpvos.fwu.
+// every .fwu is sent as fpvos.fwu. A device with a bundle per unit (the P1
+// ground units: the parser names the unit, parsed.unit) gets one image per
+// unit, each in its own folder and listed with the unit's id and name.
 import fs from 'node:fs';
 import path from 'node:path';
 import { prepareFirmware } from '../flasher.js';
@@ -56,13 +58,17 @@ for (const source of args) {
     console.log(`${source}: not listed, ${all.join(', ')} installs are not proven on hardware yet`);
     continue;
   }
-  if (images.some((i) => i.devices.some((d) => devices.includes(d)))) throw new Error(`${source}: a second image for ${devices.join(', ')}`);
+  const unit = parsed.unit ?? null;
+  if (images.some((i) => i.devices.some((d) => devices.includes(d)) && (!unit || !i.unit || i.unit === unit.id))) {
+    throw new Error(`${source}: a second image for ${devices.join(', ')}${unit ? ` (${unit.name})` : ''}`);
+  }
   const name = parsed.remoteName ?? path.basename(source);
-  const file = `${release}/${parsed.profileId}/${name}`;
-  fs.mkdirSync(path.join(out, release, parsed.profileId), { recursive: true });
+  const folder = unit ? `${release}/${parsed.profileId}/${unit.id}` : `${release}/${parsed.profileId}`;
+  const file = `${folder}/${name}`;
+  fs.mkdirSync(path.join(out, folder), { recursive: true });
   fs.writeFileSync(path.join(out, file), bytes);
-  images.push({ devices, file, name, size: bytes.length, md5: image.md5 });
-  console.log(`${file}: ${devices.join(', ')}, ${bytes.length} bytes, md5 ${image.md5}`);
+  images.push({ devices, ...(unit && { unit: unit.id, unitName: unit.name }), file, name, size: bytes.length, md5: image.md5 });
+  console.log(`${file}: ${devices.join(', ')}${unit ? ` (${unit.name})` : ''}, ${bytes.length} bytes, md5 ${image.md5}`);
 }
 if (!images.length) {
   console.log(`${release}: no image this page can flash, not listed`);

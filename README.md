@@ -36,6 +36,10 @@ image without a version check, so other Lite versions may work).
 | | 2.0.5 | ☑️ | ❌ | ❌ | bootloader checked offline only; needs a P1 build with the U-Boot bank-selection fix |
 | | 2.0.6 | ☑️ | ❌ | ❌ | bootloader checked offline only; needs the bank-selection fix |
 | | 2.1.2 | ✅ | ✅ | ✅ | Linux: flashed by mh1412 (PR #2), and again from this page 2026-11-23 (Linux Chromium), its bootloader detected with no version to pick. macOS and Windows: through the fpvOS Recovery app, 2026-11-23 (Windows again with app 0.4.1; that time the unit needed a manual restart before the flasher could connect); fpvOS went to the bank stock was not running from, stock 2.1.2 kept on the other |
+| BETAFPV VR04 HD FPV Goggles | 1.0.44, 2.0.5, 2.0.6, 2.1.4 | ☑️ | ☑️ | ☑️ | not yet hardware-tested: the bootloaders are the P1 Air's two, checked offline in the vendor's packages only; the fpvOS `p1-gnd` image has not run on a unit |
+| BETAFPV VR04 HD Pro FPV Goggles | 1.0.44, 2.0.5, 2.0.6, 2.1.4 | ☑️ | ☑️ | ☑️ | not yet hardware-tested; the same recovery; its own bundle, `fpvos-p1-gnd-goggles-pro`: stock programs a GM8773C bridge over I2C, which sends the panel its init, where the VR04 HD's panel takes it from the SoC. Its display driver is written from the stock firmware alone (the I2C bus and the lane clock are inferred); no brightness control, and the USB-C DisplayPort output is not driven. `fpvos-p1-gnd-goggles` is expected to show no picture on it |
+| BETAFPV P1 HD VRX (Standard) | 2.0.8, 2.1.4 | ☑️ | ☑️ | ☑️ | not yet hardware-tested, and never seen on a bench; the same recovery; its bundle is `fpvos-p1-gnd-vrx`, shared with the Nano (one stock product, `P1_GND_VRX`) |
+| BETAFPV P1 HD VRX (Nano) | 2.0.8, 2.1.4 | ☑️ | ☑️ | ☑️ | not yet hardware-tested, as the goggles; the same recovery; its bundle is `fpvos-p1-gnd-vrx` |
 | Skyzone SteadyDigital | SD10P_V2.0.0B03 | ✅ | ✅ | ✅ | macOS (2026-11-22) and Windows (2026-11-23) through the fpvOS Recovery app: stock → recovery → install, display and video working; fpvOS goes to the bank stock is not running from, stock kept on the other |
 
 A Lite was flashed to fpvOS beta3 on hardware (2026-10-08), but its stock
@@ -57,6 +61,7 @@ itself. The app only uses the unit's memory; the page then installs as usual.
 | Ascent Lite / Lite+ | fpvOS `.img` through the unit's updater | ☑️ | ☑️ | ☑️ | host OS not recorded |
 | Ascent VRX | `.fwu` through fpvOS recovery | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
 | BETAFPV P1 Air | `.fwu` through fpvOS recovery | ☑️ | ☑️ | ☑️ | the 2026-11-03 install ran this step on Linux; no later update recorded |
+| BETAFPV VR04 goggles / P1 HD VRX | `.fwu` through fpvOS recovery | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
 | Skyzone SteadyDigital | `.fwu` through fpvOS recovery | ☑️ | ☑️ | ☑️ | not yet hardware-tested |
 
 Stock → stock (Ascent signed upgrades, the unlocked VRX downgrade to 17.5.8)
@@ -87,6 +92,17 @@ kernel/DTB back from the unit's original backups. See
 3. In recovery, pick the unit's serial port and its `.fwu` (`fpvos-p1-air.fwu`
    or the `skyzone-steadydigital-flash` build). The page installs it, reboots and
    checks the running package's SHA-256.
+
+The **VR04 HD FPV Goggles and the P1 HD VRX (Standard and Nano)** go the same way. A stock P1 ground unit
+has the P1 Air's Sirius port and the same USB download gadget, and the two
+kinds have different recoveries, so Connect asks one thing: P1 Air, or VR04
+goggles or P1 HD VRX. Which ground unit it is is not asked: they share one
+recovery. They share one fpvOS image too, in a bundle per unit for its device
+tree (a panel, an HDMI output, or a panel behind a bridge): `fpvos-p1-gnd-goggles-<version>.fwu`,
+`fpvos-p1-gnd-vrx-<version>.fwu` (the P1 HD VRX, Standard and Nano) or
+`fpvos-p1-gnd-goggles-pro-<version>.fwu` (the VR04 HD Pro FPV Goggles). Pick the one for the unit; the recovery
+takes any of them, and a wrong one leaves the unit with no picture.
+See the [P1 ground recovery guide](assets/p1-gnd-updater/README.txt).
 
 Once on fpvOS, Connect reaches the unit directly. Stock bank, factory
 calibration and settings are kept. A unit stuck in USB download mode is
@@ -156,6 +172,7 @@ Chrome/Chromium run the tests:
 ```sh
 node --test test/*.test.mjs test/test.mjs
 python3 tools/package-p1-recovery.py --check
+python3 tools/package-p1-gnd-recovery.py --check
 node test/browser-check.mjs
 ```
 
@@ -168,8 +185,9 @@ for the device-module contract.
 ### Deploy
 
 A push to `main` runs the tests. GitHub Pages publishes the commit the `live`
-tag points to at the root and the `preview` tag at `/preview/` (same origin, so
-the same browser permissions); every deploy rebuilds both.
+tag points to at the root, the `preview` tag at `/preview/` and the `alpha` tag
+at `/alpha/` (same origin, so the same browser permissions); every deploy
+rebuilds them all.
 
 ```bash
 git tag -f preview COMMIT && git push -f origin preview
@@ -179,7 +197,17 @@ git tag -f preview COMMIT && git push -f origin preview
 git tag -f live COMMIT && git push -f origin live
 ```
 
-`git push origin --delete preview` takes the preview down.
+```bash
+git tag -f alpha COMMIT && git push -f origin alpha
+```
+
+`git push origin --delete preview` takes the preview down, and the same for
+`alpha`. `/alpha/` is for a branch under test: it lists the fpvOS releases, and
+first the files its commit names in `tools/alpha-firmware.json`, if it has one
+(the format of `tools/preview-firmware.json`). The `github-pages` environment
+must allow the `alpha` tag (Settings > Environments). A tagged commit publishes
+with its own copy of the workflow: one from before `/alpha/` drops that page
+until the workflow is run by hand from `main` (`gh workflow run pages.yml --ref main`).
 
 ## License
 

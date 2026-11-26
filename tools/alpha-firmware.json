@@ -1,0 +1,28 @@
+{
+  "_comment": [
+    "The alpha page's firmware, before it is an fpvOS release: the deploy",
+    "(.github/workflows/pages.yml) downloads each file, checks its sha256, and lists it",
+    "first in /alpha/'s catalog, every board included (make-catalog.mjs --every-board).",
+    "The BETAFPV P1 ground units, a bundle per unit: fpvOS p1-gnd at f6de323, built as",
+    "2026.11.alpha1 (a tag of the build only). Not run on hardware. Files: a gist, at a",
+    "fixed revision."
+  ],
+  "release": "2026.11.alpha1",
+  "files": [
+    {
+      "name": "fpvos-p1-gnd-goggles-2026.11.alpha1.fwu",
+      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/f71c9353aacf9a50d67a8adee0c7ea30b1d1220e/fpvos-p1-gnd-goggles-2026.11.alpha1.fwu",
+      "sha256": "388bad9abe96cd2a9d4a69069812c3433a3f6c4a448920e9d7bc918007ce76c7"
+    },
+    {
+      "name": "fpvos-p1-gnd-goggles-pro-2026.11.alpha1.fwu",
+      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/f71c9353aacf9a50d67a8adee0c7ea30b1d1220e/fpvos-p1-gnd-goggles-pro-2026.11.alpha1.fwu",
+      "sha256": "c8a0ebdd49dbb2731d042e17205941cf374c6d37fee1fec354e864f86b21e710"
+    },
+    {
+      "name": "fpvos-p1-gnd-vrx-2026.11.alpha1.fwu",
+      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/f71c9353aacf9a50d67a8adee0c7ea30b1d1220e/fpvos-p1-gnd-vrx-2026.11.alpha1.fwu",
+      "sha256": "dedd673bc122e20b54f0d479932d97fc02f71d3003558aa56836e2263e14992a"
+    }
+  ]
+}

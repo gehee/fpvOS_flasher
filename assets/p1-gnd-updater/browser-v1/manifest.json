@@ -1,0 +1,83 @@
+{
+  "format": 1,
+  "version": "browser-v1",
+  "board": "p1-gnd",
+  "board_id": 1345406788,
+  "source": "https://github.com/gehee/fpvOS",
+  "source_commit": "f6de3231e0ef2805b85c989d07a311fbb42df236",
+  "build_config": "p1gnd_defconfig, kernel with board/p1-gnd/linux-recovery.fragment",
+  "supported_stock_firmware": [
+    "1.0.44.rel",
+    "2.0.5.rel",
+    "2.0.6.rel",
+    "2.0.8.rel",
+    "2.1.4.rel"
+  ],
+  "files": {
+    "kernel.img": {
+      "size": 4299520,
+      "sha256": "4995071ada3aea99e8e650c63e81c573e8bf2e4ba53ce7e2ab5892ad8ece8276",
+      "address": 608174080
+    },
+    "betafpv-p1-gnd.dtb": {
+      "size": 8106,
+      "sha256": "36fac2058d0625ef9e82c3f7f4d8e14d01bc9d69162877342f39d18cd86ae1d0",
+      "address": 570949632
+    },
+    "recovery-initrd.img": {
+      "size": 1332,
+      "sha256": "c2e84af285799781395b46363407c2178c93ccc647a2eb09053f7532f517b344",
+      "address": 637534208
+    }
+  },
+  "bootloaders": {
+    "v1": {
+      "fingerprints": [
+        {
+          "address": 804808584,
+          "size": 64,
+          "sha256": "8d64ac5d0fbbab044f2669df89f474bd4264515027e58d387e256e1ea9a5e700"
+        },
+        {
+          "address": 804809040,
+          "size": 64,
+          "sha256": "873222ba22f63c746288b66083ee88421c941cfdd2dc335532c42b1c2077a788"
+        },
+        {
+          "address": 804675224,
+          "size": 64,
+          "sha256": "d5e7caa635ba5af4b785d0e665f8ddeccadd6c2f7e3afaa483725954a328992e"
+        },
+        {
+          "address": 804805456,
+          "size": 64,
+          "sha256": "fa1863401a64e73cb609ac67db1e64163a8998c6d83c7672557afcec67709910"
+        }
+      ]
+    },
+    "v2": {
+      "fingerprints": [
+        {
+          "address": 803757016,
+          "size": 64,
+          "sha256": "3f059998c3d1b2f6088ef74287b05398519601401bacc14515d73c91c856eaee"
+        },
+        {
+          "address": 803757472,
+          "size": 64,
+          "sha256": "fb5c0b1747f7e78003f92bba2591dd13b1437cf81a4d2c0b68f52d7fbd394065"
+        },
+        {
+          "address": 803623384,
+          "size": 64,
+          "sha256": "d5e7caa635ba5af4b785d0e665f8ddeccadd6c2f7e3afaa483725954a328992e"
+        },
+        {
+          "address": 803753888,
+          "size": 64,
+          "sha256": "fa1863401a64e73cb609ac67db1e64163a8998c6d83c7672557afcec67709910"
+        }
+      ]
+    }
+  }
+}

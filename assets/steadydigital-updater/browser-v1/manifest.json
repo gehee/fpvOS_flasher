@@ -4,7 +4,7 @@
   "board": "skyzone-steadydigital",
   "board_id": 21316,
   "source": "https://github.com/gehee/fpvOS",
-  "source_commit": "4fabe2faf1c4c4498501246faa6686f5473786e8",
+  "source_commit": "23a98819b98cfbd4a299ee2ba3e58dc1c86ff55d",
   "build_config": "skyzonesteadydigital_flash_defconfig",
   "supported_stock_firmware": [
     "ZBBM5DZFMP-uboot-2020.10-20260402"

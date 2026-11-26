@@ -6,17 +6,23 @@ import http from 'node:http';
 import { spawn } from 'node:child_process';
 
 export const PUBLIC_ASSETS = new Set(['index.html', 'app.js', 'flasher.js', 'firmware.js', 'prepare-support.js',
-  'devices/index.js', 'devices/common.js', 'devices/ascent-air.js', 'devices/ascent-vrx.js', 'devices/fpvos-ar9311.js', 'devices/fpvos-p1-air.js', 'devices/fpvos-steadydigital.js', 'devices/fpvos-bundle.js',
+  'devices/index.js', 'devices/common.js', 'devices/ascent-air.js', 'devices/ascent-vrx.js', 'devices/fpvos-ar9311.js', 'devices/fpvos-p1-air.js', 'devices/fpvos-p1-gnd.js', 'devices/fpvos-steadydigital.js', 'devices/fpvos-bundle.js',
   'stages/ascent.js', 'stages/vrx-unlock.js', 'stages/fpvos.js', 'stages/ar9311-bootstrap.js', 'stages/p1-bootstrap.js', 'stages/location.js', 'location.js', 'zones.js', 'transports/p1-hid.js', 'transports/ascent.js', 'transports/web-serial.js',
   'assets/ar9311-updater/v3/manifest.json', 'assets/ar9311-updater/v3/fpvos-update-ar9311',
   'assets/ar9311-updater/v3/bootstrap.sh', 'assets/ar9311-updater/COPYING',
   'assets/p1-updater/browser-v1/manifest.json', 'assets/p1-updater/browser-v1/kernel.img', 'assets/p1-updater/browser-v1/betafpv-p1-air.dtb', 'assets/p1-updater/browser-v1/recovery-initrd.img', 'assets/p1-updater/README.txt', 'assets/p1-updater/COPYING',
+  'assets/p1-gnd-updater/browser-v1/manifest.json', 'assets/p1-gnd-updater/browser-v1/kernel.img', 'assets/p1-gnd-updater/browser-v1/betafpv-p1-gnd.dtb', 'assets/p1-gnd-updater/browser-v1/recovery-initrd.img', 'assets/p1-gnd-updater/README.txt', 'assets/p1-gnd-updater/COPYING',
   'assets/steadydigital-updater/browser-v1/manifest.json', 'assets/steadydigital-updater/browser-v1/kernel.img', 'assets/steadydigital-updater/browser-v1/skyzone-steadydigital.dtb', 'assets/steadydigital-updater/browser-v1/recovery-initrd.img',
   'archive.js', 'xz.js', 'checksum.js', 'fonts/ChakraPetch-Medium.ttf', 'fonts/ChakraPetch-SemiBold.ttf']);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // extra: { 'served/path': 'file on disk' } on top of the public assets (a test catalog;
 // a path ending in / is served as HTML, a directory listing)
+// How long the waits are, against the times written at each one: a shared CI
+// runner has been seen to take over 15 s to start the browser and over 3 s to
+// open a dialog. BROWSER_CHECK_PATIENCE sets it.
+const PATIENCE = Number(process.env.BROWSER_CHECK_PATIENCE) || (process.env.CI ? 4 : 1);
+
 export async function openBrowser({ root, out, permission, headless = true, onProblem = () => {}, extra = {} }) {
   const server = http.createServer((req, res) => {
     const name = new URL(req.url, 'http://localhost').pathname.slice(1) || 'index.html';
@@ -75,13 +81,20 @@ export async function openBrowser({ root, out, permission, headless = true, onPr
     return r.result.value;
   };
   const until = async (expression, ms, label) => {
-    const deadline = Date.now() + ms;
+    const deadline = Date.now() + ms * PATIENCE;
     let last;
     while (Date.now() < deadline) {
       try { if (await evaluate(expression)) return; } catch (e) { last = e.message; }
       await sleep(100);
     }
-    throw new Error(`Timed out: ${label ?? expression}${last ? ` (${last})` : ''}`);
+    // what the page showed instead: its open dialogs, the platform it saw, the end of its log
+    let page = '';
+    try {
+      page = await evaluate(`JSON.stringify({ dialogs: [...document.querySelectorAll('dialog[open]')].map((d) => d.id + ': ' + d.innerText.replace(/\\s+/g, ' ').slice(0, 160)),
+        open: [...document.querySelectorAll('details[open]')].map((d) => d.id), ua: navigator.userAgent.replace(/^Mozilla\\/5.0 /, '').slice(0, 60),
+        log: (document.querySelector('#log')?.innerText ?? '').replace(/\\s+/g, ' ').slice(-400) })`);
+    } catch { /* no page to ask */ }
+    throw new Error(`Timed out: ${label ?? expression}${last ? ` (${last})` : ''}${page ? `; page: ${page}` : ''}`);
   };
   const click = async (selector) => {
     const point = await evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({block:'center'}); const r = e.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2}; })()`);
@@ -108,7 +121,7 @@ export async function openBrowser({ root, out, permission, headless = true, onPr
       '--disable-renderer-backgrounding', '--window-size=1100,1600', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
     const endpoint = await new Promise((resolve, reject) => {
       let text = '';
-      const timer = setTimeout(() => reject(new Error(`Browser startup failed: ${text}`)), 15000);
+      const timer = setTimeout(() => reject(new Error(`Browser startup failed: ${text}`)), 15000 * PATIENCE);
       browser.once('error', (e) => { clearTimeout(timer); reject(e); });
       browser.once('exit', (code, signal) => { clearTimeout(timer); reject(new Error(`Browser exited during startup (${signal ?? code}): ${text}`)); });
       browser.stderr.on('data', (data) => {

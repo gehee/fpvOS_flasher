@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
-import { P1HidRecovery, P1_RAM_FILES, enterP1Bootloader, sha256 } from '../transports/p1-hid.js';
-import { loadP1Recovery, prepareP1Recovery, prepareSteadyDigitalRecovery } from '../stages/p1-bootstrap.js';
+import { P1HidRecovery, P1_RAM_FILES, P1_GND_RAM_FILES, P1_STOCK_VERSIONS, P1_GND_STOCK_VERSIONS, enterP1Bootloader, sha256 } from '../transports/p1-hid.js';
+import { loadP1Recovery, loadP1GndRecovery, prepareP1Recovery, prepareP1GndRecovery, prepareSteadyDigitalRecovery } from '../stages/p1-bootstrap.js';
 import { crc32 } from '../checksum.js';
 const TABLE = 0x2ffbf290, MAGIC = 0x2ffbf378, CALLBACK = 0x2ffbf330;
 class FakeHid extends EventTarget {
@@ -352,4 +352,46 @@ test('auto: a policy missing either bootloader is rejected before any probe', as
   const link = new P1HidRecovery(device, { stockVersion: 'auto' }); await link.open();
   try { await assert.rejects(link.identify({ v1 }), /fingerprint policy/); assert.equal(device.frames.length, 0); }
   finally { await link.close(); }
+});
+
+// ---- P1 ground units (VR04 goggles, P1 HD VRX): the P1's bootloaders, their own recovery set
+const autoPolicyFor = async (device) => Object.fromEntries(Object.entries(await autoPolicy(device)).map(([id, fingerprints]) => [id, { fingerprints }]));
+const fetchGndAssets = async (url) => new Response(await fs.readFile(new URL('../assets/p1-gnd-updater/browser-v1/' + new URL(url).pathname.split('/').pop(), import.meta.url)));
+test('ground stock 2.0.8 and 2.1.4 are v2 bootloaders; each P1 kind lists its own versions', async () => {
+  assert.deepEqual(P1_STOCK_VERSIONS, ['1.0.44', '2.0.5', '2.0.6', '2.1.2']);
+  assert.deepEqual(P1_GND_STOCK_VERSIONS, ['1.0.44', '2.0.5', '2.0.6', '2.0.8', '2.1.4']);
+  for (const stockVersion of ['2.0.8', '2.1.4']) {
+    const { device, link } = await identified({ stockVersion, ramFiles: P1_GND_RAM_FILES });
+    try { assert.equal(link.bootloader, 'v2'); assert.deepEqual(device.writes.slice(0, 2), [{ address: 0x2febebd0, bytes: 1 }, { address: 0x2febeb88, bytes: 8 }]); }
+    finally { await link.close(); }
+  }
+});
+test('the ground recovery set has one device tree, for any ground unit, and forces independent recovery', async () => {
+  const { manifest, files } = await loadP1GndRecovery({ fetcher: fetchGndAssets });
+  assert.equal(manifest.board_id, 1345406788);
+  assert.deepEqual(files.map(f => f.name), ['kernel.img', 'betafpv-p1-gnd.dtb', 'recovery-initrd.img']);
+  assert.deepEqual(Object.keys(manifest.files).sort(), ['betafpv-p1-gnd.dtb', 'kernel.img', 'recovery-initrd.img']);
+  // the tree names no unit: the recovery tells itself apart
+  const dtb = Buffer.from(files[1].bytes).toString('latin1');
+  assert.ok(dtb.includes('betafpv,p1-gnd\0'));
+  assert.ok(!dtb.includes('betafpv,p1-goggle') && !dtb.includes('betafpv,p1-nano-vrx'));
+  const archive = gunzipSync(files[2].bytes.subarray(64)).toString();
+  assert.match(archive, /if false; then/); assert.doesNotMatch(archive, /if \/usr\/sbin\/ar9311-nandctl boot/);
+  assert.match(manifest.source_commit, /^[0-9a-f]{40}$/);
+});
+test('preparing a ground unit loads the one ground recovery and nothing of the air unit', async () => {
+  const device = new FakeHid('v2'), logs = [];
+  const assets = { manifest: { bootloaders: await autoPolicyFor(device) },
+    files: ['kernel.img', 'betafpv-p1-gnd.dtb', 'recovery-initrd.img'].map((name, i) => ({ name, bytes: new Uint8Array(100 + i).fill(0x40 + i) })) };
+  await prepareP1GndRecovery(device, { stockVersion: 'auto', assets, log: (m) => logs.push(m), readTimeout: 20, commandPause: 0 });
+  assert.deepEqual(device.booted.args, ['24400000', '26000000', '22080000']);
+  assert.deepEqual([...device.get(0x22080000, 4)], [0x41, 0x41, 0x41, 0x41], 'the device tree is in RAM');
+  assert.ok(logs.some((m) => m.includes('Verified betafpv-p1-gnd.dtb')));
+  // another board's tree is not one of this recovery's RAM files
+  for (const other of ['betafpv-p1-air.dtb', 'betafpv-p1-goggle.dtb', 'betafpv-p1-nano-vrx.dtb']) {
+    const bad = new FakeHid('v2');
+    await assert.rejects(prepareP1GndRecovery(bad, { stockVersion: 'auto', readTimeout: 20, commandPause: 0,
+      assets: { manifest: { bootloaders: await autoPolicyFor(bad) }, files: [{ name: other, bytes: new Uint8Array(8) }] } }), /Invalid P1 recovery image/);
+    assert.equal(bad.booted, undefined);
+  }
 });

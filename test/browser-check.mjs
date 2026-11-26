@@ -121,6 +121,13 @@ async function p1StockDetection() {
   if (!await js("document.querySelector('#unit-info').hidden")) fail.push('stock P1 auto-connected as a device');
   if (!await js("document.querySelector('#p1-preparation').hidden")) fail.push('P1 preparation shown before a stock P1 was found');
   await js("document.querySelector('#connect').click()");
+  // every stock P1 has the same port: the air unit or a ground unit, a recovery each
+  await until("document.querySelector('#unit-choice').open", 3000, 'which stock P1');
+  const offered = String(await js("[...document.querySelectorAll('#unit-choice-options button')].map((b) => b.textContent).join('|')"));
+  if (offered !== 'BETAFPV P1 Air|BETAFPV VR04 goggles or P1 HD VRX') fail.push(`wrong stock P1 choices: ${offered}`);
+  if (await js("Array.isArray(window.__fake.p1RebootRaw)")) fail.push('a reboot was sent before the unit was chosen');
+  await shot('p1-stock-choice');
+  await js("document.querySelector('#unit-choice-options button').click()");
   await until("document.querySelector('#ask').open", 3000, 'stock P1 prepare confirm');
   if (!await js("/stock firmware 1\\.0\\.44/.test(document.querySelector('#ask-text').textContent)")) fail.push('stock P1 confirm lacks the supported-version scope');
   await shot('p1-stock-confirm');
@@ -136,6 +143,24 @@ async function p1StockDetection() {
   if (!await js("document.querySelector('#p1-enter-bootloader').disabled && document.querySelector('#p1-enter-bootloader').classList.contains('step-done')")) fail.push('step 1 not greyed/ticked after the auto restart');
   if (!await js("document.querySelector('#p1-load-recovery').classList.contains('step-active')")) fail.push('step 2 not lit as the next action');
   await shot('p1-stock-detection');
+  // the same port as a ground unit: cancelling the choice does nothing; a ground unit gets its own wording
+  await cdp('Page.navigate', { url: `${base}?device=p1stock` });
+  await until("document.readyState === 'complete' && !document.querySelector('#connect').hidden", 10000, 'stock page again');
+  await js("document.querySelector('#connect').click()");
+  await until("document.querySelector('#unit-choice').open", 3000, 'which stock P1 (cancel)');
+  await js("document.querySelector('#unit-choice button[value=cancel]').click()");
+  await until("!document.querySelector('#unit-choice').open", 3000, 'choice closed');
+  if (await js("document.querySelector('#ask').open || !document.querySelector('#p1-preparation').hidden || Array.isArray(window.__fake.p1RebootRaw)")) fail.push('a cancelled choice still started preparation');
+  await js("document.querySelector('#connect').click()");
+  await until("document.querySelector('#unit-choice').open", 3000, 'which stock P1 (ground)');
+  await js("[...document.querySelectorAll('#unit-choice-options button')].find((b) => /P1 HD VRX/.test(b.textContent)).click()");
+  await until("document.querySelector('#ask').open", 3000, 'stock ground unit prepare confirm');
+  if (!await js("/VR04 goggles or P1 HD VRX/.test(document.querySelector('#ask-title').textContent) && /2\\.1\\.4/.test(document.querySelector('#ask-text').textContent) && /names the unit/.test(document.querySelector('#ask-text').textContent)")) fail.push('ground unit confirm lacks its name, stock versions or that the bundle names the unit');
+  await js("document.querySelector('#ask-ok').click()");
+  await until("Array.isArray(window.__fake.p1RebootRaw)", 5000, 'restart sent (ground unit)');
+  await until("document.querySelector('#p1-preparation-cancel').hidden", 5000, 'restart finished (ground unit)');
+  if (!await js("/VR04 goggles or P1 HD VRX/.test(document.querySelector('#prep-summary').textContent) && /P1 HD VRX \\(Standard or Nano\\)/.test(document.querySelector('#prep-confirm').textContent)")) fail.push('preparation panel does not name the ground units');
+  await shot('p1-gnd-detection');
   return fail;
 }
 
@@ -314,6 +339,27 @@ async function testBuilds() {
   await js("window.dispatchEvent(new Event('focus'))");
   await until(`document.querySelector('#release option[value="test:fpvOS-new-Ascent_H_Sky.img"]')`, 5000, 'new test build listed');
   listing('test-root.html', testRoot);
+  return fail;
+}
+
+// A device with a bundle per unit (the P1 ground units): the release is listed
+// once per unit, none is chosen for the user, and the button names the unit.
+async function unitChoice() {
+  console.log('--- firmware choice: a bundle per unit, chosen by the user');
+  const fail = [];
+  await connectedPage('?device=p1gnd');
+  const options = await js("[...document.querySelectorAll('#release option')].map(o => `${o.value}=${o.textContent}`).join('|')");
+  const want = ['=Choose the firmware for your unit', 'test-units/goggles=fpvOS test-units · VR04 HD FPV Goggles · latest',
+    'test-units/goggles-pro=fpvOS test-units · VR04 HD Pro FPV Goggles · latest', 'test-units/vrx=fpvOS test-units · P1 HD VRX (Standard or Nano) · latest'];
+  if (!options.startsWith(want.join('|'))) fail.push(`per-unit release list: ${options}`);
+  const idle = await js("({ pick: document.querySelector('#release').value, off: document.querySelector('#flash').disabled, hint: document.querySelector('#hint').textContent })");
+  if (idle.pick !== '' || !idle.off || !/for your unit/.test(idle.hint)) fail.push(`a unit's bundle was chosen for the user: ${JSON.stringify(idle)}`);
+  await shot('unit-choice');
+  await js("document.querySelector('#release-button').click()");
+  await js("document.querySelector('#release-list li[data-value=\"test-units/vrx\"]').click()");
+  const picked = await js("({ pick: document.querySelector('#release').value, text: document.querySelector('#flash').textContent, off: document.querySelector('#flash').disabled })");
+  if (picked.pick !== 'test-units/vrx' || picked.text !== 'Install fpvOS test-units · P1 HD VRX (Standard or Nano)' || picked.off) fail.push(`unit pick: ${JSON.stringify(picked)}`);
+  await shot('unit-chosen');
   return fail;
 }
 
@@ -600,7 +646,10 @@ fs.writeFileSync(p1Fwu, Buffer.concat([p1Header, ...fwuParts]));
 const catalog = path.join(out, 'catalog.json');
 const published = (release) => ({ release, images: [{ devices: ['ascent-air'], file: `${release}/air.img`,
   name: 'Ascent_H_Sky_18_21_10.img', size: fs.statSync(img).size, md5: createHash('md5').update(fs.readFileSync(img)).digest('hex') }] });
-fs.writeFileSync(catalog, JSON.stringify({ releases: [published('test-new'), published('test-old')] }));
+// and one for the P1 ground units, an image per unit (never downloaded here)
+const units = { release: 'test-units', images: [['goggles', 'VR04 HD FPV Goggles'], ['goggles-pro', 'VR04 HD Pro FPV Goggles'], ['vrx', 'P1 HD VRX (Standard or Nano)']]
+  .map(([unit, unitName]) => ({ devices: ['fpvos-p1-gnd'], unit, unitName, file: `test-units/fpvos-p1-gnd/${unit}/fpvos.fwu`, name: 'fpvos.fwu', size: 1, md5: '0'.repeat(32) })) };
+fs.writeFileSync(catalog, JSON.stringify({ releases: [units, published('test-new'), published('test-old')] }));
 // test builds in test-firmware/, as python3 -m http.server lists them: a build
 // folder with an air image and a note, a goggle image and an unversioned air image
 const listing = (name, links) => {
@@ -668,6 +717,7 @@ try {
     failures.push(...await rejectedProfile('air-rejects-vrx', '', vrx));
   }
   failures.push(...await catalogInstall());
+  failures.push(...await unitChoice());
   failures.push(...await catalogInstallStillStock());
   failures.push(...await testBuilds());
   failures.push(...await deviceModes());
@@ -680,5 +730,7 @@ try {
 failures.push(...problems);
 console.log(`screenshots: ${out}`);
 console.log(failures.length ? `FAIL\n  ${failures.join('\n  ')}` : 'PASS');
+// in GitHub Actions, each failure as an annotation on the run
+if (process.env.GITHUB_ACTIONS) for (const f of failures) console.log(`::error title=browser-check::${String(f).replace(/%/g, '%25').replace(/\r?\n/g, '%0A')}`);
 await harness.close();
 process.exit(failures.length ? 1 : 0);

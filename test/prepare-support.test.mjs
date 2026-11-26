@@ -3,7 +3,7 @@
 // that names the OS and points at Linux/ChromeOS.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { browserPrepareSupport, recoveryAppDownload, recoveryAppUrl, recoveryTerminalCommand } from '../prepare-support.js';
+import { browserPrepareSupport, recoveryAppDownload, recoveryAppUrl, recoveryTerminalCommand, RECOVERY_APP_RELEASE } from '../prepare-support.js';
 
 const UA = {
   linux: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36',
@@ -98,14 +98,17 @@ test('recoveryAppDownload is null where the browser path works or has no build',
   }
 });
 
-test('recoveryAppUrl builds a latest-release asset URL from a file name', () => {
+test('recoveryAppUrl builds a release asset URL from a file name: the latest, or the one this commit names', () => {
   assert.equal(
     recoveryAppUrl('fpvOS-Recovery-macOS.zip'),
-    'https://github.com/gehee/fpvOS_recovery/releases/latest/download/fpvOS-Recovery-macOS.zip',
+    RECOVERY_APP_RELEASE
+      ? `https://github.com/gehee/fpvOS_recovery/releases/download/${RECOVERY_APP_RELEASE}/fpvOS-Recovery-macOS.zip`
+      : 'https://github.com/gehee/fpvOS_recovery/releases/latest/download/fpvOS-Recovery-macOS.zip',
   );
+  if (RECOVERY_APP_RELEASE) assert.match(RECOVERY_APP_RELEASE, /^recovery-app-v[\w.-]+$/);
   // Every offered download names a file the URL builder can resolve.
   for (const key of ['mac', 'windows']) {
     const dl = recoveryAppDownload(UA[key]);
-    assert.ok(recoveryAppUrl(dl.file).endsWith(`/download/${dl.file}`), key);
+    assert.ok(recoveryAppUrl(dl.file).endsWith(`/download/${RECOVERY_APP_RELEASE ? `${RECOVERY_APP_RELEASE}/` : ''}${dl.file}`), key);
   }
 });

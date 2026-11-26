@@ -23,8 +23,14 @@ const layouts = {
 for (const layout of Object.values(layouts)) {
   Object.freeze(layout.callbacks); Object.freeze(layout.fingerprints); Object.freeze(layout);
 }
-const versions = Object.freeze({ '1.0.44': 'v1', '2.0.5': 'v2', '2.0.6': 'v2', '2.1.2': 'v2' });
-export const P1_STOCK_VERSIONS = Object.freeze(Object.keys(versions));
+// 2.0.8 and 2.1.4 are ground firmware (P1_GND): the P1 HD VRX's, and from
+// 2.1.4 the one package for every P1 ground unit. Their U-Boot is the v2 code
+// (the fingerprinted regions hash the same in the vendor's packages).
+const versions = Object.freeze({ '1.0.44': 'v1', '2.0.5': 'v2', '2.0.6': 'v2', '2.1.2': 'v2', '2.0.8': 'v2', '2.1.4': 'v2' });
+// What each kind of P1 ships with: the air unit, and the ground units (the
+// VR04 goggles, the P1 HD VRX).
+export const P1_STOCK_VERSIONS = Object.freeze(['1.0.44', '2.0.5', '2.0.6', '2.1.2']);
+export const P1_GND_STOCK_VERSIONS = Object.freeze(['1.0.44', '2.0.5', '2.0.6', '2.0.8', '2.1.4']);
 // The bootloader found by probing rather than named: v1 first, v2 only once v1
 // got no reply. A v1 probe on a v2 loader is known to be harmless (a 2.1.2 P1
 // took four and stayed up, 2026-11-23); a v2 probe on a v1 loader has never
@@ -45,6 +51,8 @@ const SCRATCH = 0x24bff000;
 // late clock cleanup stops the board once its USB gadget is up); then what the
 // v1 boot sets in one line: the DTB and initrd kept where they were loaded, and
 // a non-secure boot. Leaves a/r/f/n/s, which upload() and boot() use.
+// The P1 ground recovery kernel forces its own line (CONFIG_CMDLINE_FORCE,
+// the same one-CPU settings with its 148 MiB), so this one is not read there.
 const P1_V2_BOOTARGS = Object.freeze([
   'set w console=', 'set y ttyS0,', 'set z 1152000', 'set k mem=128M',
   'set u rdinit=/', 'set v init', 'set m maxcpus=1', 'set p nr_cpus=1',
@@ -60,6 +68,10 @@ const PROBE_ATTEMPTS = 4;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export const P1_RAM_FILES = Object.freeze({ 'kernel.img': [0x24400000, 6291456],
   'betafpv-p1-air.dtb': [0x22080000, 65536], 'recovery-initrd.img': [0x26000000, 65536] });
+// The P1 ground units (VR04 goggles, P1 HD VRX): one recovery, with a device tree
+// for any of them - the unit tells itself apart once it runs.
+export const P1_GND_RAM_FILES = Object.freeze({ 'kernel.img': [0x24400000, 6291456],
+  'betafpv-p1-gnd.dtb': [0x22080000, 65536], 'recovery-initrd.img': [0x26000000, 65536] });
 // Same RAM destinations; only the DTB file name differs for the SteadyDigital.
 export const STEADYDIGITAL_RAM_FILES = Object.freeze({ 'kernel.img': [0x24400000, 6291456],
   'skyzone-steadydigital.dtb': [0x22080000, 65536], 'recovery-initrd.img': [0x26000000, 65536] });

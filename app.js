@@ -5,7 +5,7 @@
 import { LinkLostError, deviceModeOf, deviceModeRequest } from './transports/ascent.js';
 import { WebSerialLink } from './transports/web-serial.js';
 import {
-  USB_FILTERS, CONNECT_FILTERS, getProfile, profileForUsb, profileForDevice, preparationForUsb,
+  USB_FILTERS, CONNECT_FILTERS, getProfile, profileForUsb, profileForDevice, preparationsForUsb,
 } from './devices/index.js';
 import { prepareFirmware, evaluateSelection, flashFirmware, installResult } from './flasher.js';
 import { formatBytes } from './devices/common.js';
@@ -26,7 +26,7 @@ const state = {
   profile: null,     // positively identified connected hardware, never a UI override
   unlockOverride: null, // null = version-based automatic selection; boolean = manual choice
   prepAssets: null,  // the recovery set being fetched for step 2 (a promise)
-  prepProfile: null, // the stock board being prepared (its profile's preparation block)
+  prepChoice: null,  // the stock unit being prepared: { profile, unit, ui } (devices/index.js preparationsForUsb)
   p1Stage: null,     // stock P1 preparation: null | 'restart' (step 1 next) | 'recovery' (step 2 next) | 'done'
   recoveryApp: null, // macOS/Windows: the recovery-app download to offer, or null
   connecting: false,
@@ -83,8 +83,15 @@ async function connect() {
   // Sirius port) is not yet an fpvOS device, so it cannot just be opened: hand
   // it to preparation, which works from the profile the port belongs to.
   state.recoveryApp = null;
-  const stock = isOurs(port) ? null : preparationForUsb(port.getInfo());
-  if (stock) { await beginPreparation(port, stock); return; }
+  const stock = isOurs(port) ? [] : preparationsForUsb(port.getInfo());
+  if (stock.length) {
+    // Several units share that stock port (every stock P1): the user says which.
+    const choice = stock.length === 1 ? stock[0] : stock[await chooseOne('Which unit is this?',
+      'These units look the same over USB on their stock firmware. Choose the one that is connected: '
+      + 'it decides which recovery is loaded.', stock.map((c) => c.ui.name))];
+    if (choice) await beginPreparation(port, choice);
+    return;
+  }
   await openPort(port);
 }
 
@@ -147,7 +154,7 @@ async function openPort(port) {
   // a downloaded image belongs to the unit it was fetched for; a chosen file is
   // checked again against whatever is connected now
   if (state.image?.catalog) { state.image = null; state.flashed = null; }
-  if (!releasesFor(state.profile).some((e) => e.release === state.pick) && state.pick !== 'file'
+  if (!releasesFor(state.profile).some((e) => e.key === state.pick) && state.pick !== 'file'
     && !state.tests.some((t) => `test:${t.path}` === state.pick)) state.pick = '';
   render();
   if (state.profile && state.image?.file) loadFile(state.image.file);
@@ -204,9 +211,9 @@ function setUnitStatus(kind, text) {
 // Sirius serial id (profile.meta.preparation.serialFilter), never from
 // auto-open on plug. Confirm, then run the first step with the port we already
 // have, so the restart needs no second chooser.
-function showPreparationUi(profile) {
-  const { ui } = profile.meta.preparation;
-  state.prepProfile = profile;
+function showPreparationUi(choice) {
+  const { ui } = choice;
+  state.prepChoice = choice;
   $('prep-summary').textContent = `Prepare a ${ui.title.replace(/^Stock /, 'stock ')}`;
   for (const el of document.querySelectorAll('.prep-name')) el.textContent = ui.name;
   $('prep-confirm').textContent = ui.confirm;
@@ -217,9 +224,9 @@ function showPreparationUi(profile) {
 // macOS/Windows hand-off: show the recovery-app panel with the OS-specific
 // download and the steps to run it, then come back and Connect to the recovery
 // serial. The native app does the bootloader work the browser can't.
-function showRecoveryAppUi(profile, dl) {
-  const { ui } = profile.meta.preparation;
-  state.prepProfile = profile;
+function showRecoveryAppUi(choice, dl) {
+  const { ui } = choice;
+  state.prepChoice = choice;
   state.p1Stage = null;
   state.recoveryApp = dl;
   $('recovery-summary').textContent = `Prepare your ${ui.name} with the recovery app`;
@@ -249,9 +256,9 @@ function showRecoveryAppUi(profile, dl) {
   $('recovery-app').open = true;
   render();
 }
-async function beginPreparation(port, profile) {
+async function beginPreparation(port, choice) {
   if (state.busy || state.connecting || state.link) return;
-  const { ui } = profile.meta.preparation;
+  const { ui } = choice;
   // The stock preparation step only works on Linux/ChromeOS (see prepare-support.js).
   // On macOS/Windows, explain why rather than dropping the user into a flow that
   // cannot talk to the bootloader; keep a deliberate opt-out for edge cases.
@@ -261,14 +268,14 @@ async function beginPreparation(port, profile) {
     // recovery app, which boots the unit into fpvOS recovery mode; the user
     // then returns here and Connects to the recovery serial to install.
     const dl = recoveryAppDownload(navigator.userAgent);
-    if (dl) { showRecoveryAppUi(profile, dl); return; }
+    if (dl) { showRecoveryAppUi(choice, dl); return; }
     // No build for this OS (e.g. Android): explain the Linux/ChromeOS path.
     await ask('Use Linux or ChromeOS for this step', osSupport.message);
     return;
   }
   const ok = await ask(ui.title, ui.ask, 'Prepare');
   if (!ok) return;
-  showPreparationUi(profile);
+  showPreparationUi(choice);
   $('p1-preparation').open = true;
   $('p1-stock-confirm').checked = true;
   state.p1Stage = 'restart';
@@ -282,8 +289,9 @@ async function beginPreparation(port, profile) {
 let preparationAbort = null;
 async function prepareStock(loadRecovery, presetPort = null) {
   if (state.busy || state.connecting || state.link || !$('p1-stock-confirm').checked) return;
-  const profile = state.prepProfile ?? getProfile('fpvos-p1-air');
-  const preparation = profile.meta.preparation, { ui } = preparation;
+  const p1Air = getProfile('fpvos-p1-air');
+  const { profile, unit, ui } = state.prepChoice ?? { profile: p1Air, unit: null, ui: p1Air.meta.preparation.ui };
+  const preparation = profile.meta.preparation;
   state.preparing = true;
   preparationAbort = new AbortController();
   const signal = preparationAbort.signal;
@@ -294,17 +302,17 @@ async function prepareStock(loadRecovery, presetPort = null) {
       // The recovery images were fetched and checked while step 1 ran, so the
       // bootloader is spoken to the moment its device is chosen: it is only
       // up for a limited while, and the working order is assets first, chooser, I/O.
-      const assets = await (state.prepAssets ?? preparation.loadAssets({ signal })).catch(() => null) ?? undefined;
+      const assets = await (state.prepAssets ?? preparation.loadAssets({ signal, unit })).catch(() => null) ?? undefined;
       const [device] = await navigator.hid.requestDevice({ filters: [preparation.hidFilter] });
       if (!device) { progress(`No bootloader selected. Select the same ${ui.serialName} when it appears as USB download gadget.`); return; }
-      await preparation.loadRecovery(device, { stockVersion: preparation.stockVersion, assets, signal, progress, log });
+      await preparation.loadRecovery(device, { stockVersion: preparation.stockVersion, unit, assets, signal, progress, log });
       state.prepAssets = null;
       state.p1Stage = 'done';
       progress(`Recovery boot requested. Wait for USB to reconnect, then click Connect above and select the ${ui.serialName} serial port. Choose your ${ui.name} .fwu file and click Flash.`);
       log(`${ui.name} recovery loaded through WebHID; connect its new serial port to install firmware.`);
     } else {
       const port = presetPort ?? await navigator.serial.requestPort({ filters: [preparation.serialFilter] });
-      state.prepAssets = preparation.loadAssets({ signal });   // fetched and verified now, used by step 2
+      state.prepAssets = preparation.loadAssets({ signal, unit });   // fetched and verified now, used by step 2
       state.prepAssets.catch(() => {});
       await preparation.enterBootloader(port, { signal });
       state.p1Stage = 'recovery';
@@ -362,6 +370,7 @@ async function loadFile(file, catalog = null) {
 // The images this page offers, published next to it from the fpvOS releases:
 // firmware/catalog.json = { releases: [{ release, images: [{ devices: [profile id], file, name, size, md5 }] }] },
 // newest release first; file relative to firmware/, name the one it is sent as.
+// A device with a bundle per unit has one image per unit (unit, unitName).
 async function loadCatalog() {
   let catalog = null;
   try {
@@ -374,12 +383,15 @@ async function loadCatalog() {
   render();
 }
 
-// The published images for a unit, newest first: [{ release, ...image }]
+// The published images for a device, newest first: [{ release, key, ...image }],
+// one per release, or one per unit of it where the device has a bundle per
+// unit (key: what the firmware choice holds, the release or release/unit).
 const releasesFor = (profile) => ((profile && state.catalog) || []).flatMap((r) => {
-  const image = r.images.find((i) => i.devices?.includes(profile.meta.id));
-  return image ? [{ ...image, release: r.release }] : [];
+  const images = r.images.filter((i) => i.devices?.includes(profile.meta.id));
+  return (images.some((i) => i.unit) ? images.filter((i) => i.unit) : images.slice(0, 1))
+    .map((image) => ({ ...image, release: r.release, key: image.unit ? `${r.release}/${image.unit}` : r.release }));
 });
-const pickedRelease = () => releasesFor(state.profile).find((e) => e.release === state.pick) ?? null;
+const pickedRelease = () => releasesFor(state.profile).find((e) => e.key === state.pick) ?? null;
 // a file of your own or a test build: flashed as it is, with all its checks shown
 const pickedIsFile = () => state.pick === 'file' || state.pick.startsWith('test:');
 const pickedFile = () => state.pick === 'file' ? state.localFile
@@ -523,7 +535,7 @@ async function go() {
     render();
   }
   await loadFile(file, entry);
-  if (state.image?.catalog === entry && state.pick === entry.release && canFlash()) await flash();
+  if (state.image?.catalog === entry && state.pick === entry.key && canFlash()) await flash();
 }
 
 // Problems from the image and the unit together: [{level, text}]
@@ -747,6 +759,21 @@ function ask(title, text, okLabel) {
   });
 }
 
+// One of several, each a button: resolves to its index, or -1 when cancelled.
+function chooseOne(title, text, options) {
+  const d = $('unit-choice');
+  $('unit-choice-title').textContent = title;
+  $('unit-choice-text').textContent = text;
+  $('unit-choice-options').replaceChildren(...options.map((label, i) => {
+    const b = el('button', label); b.value = String(i); return b;
+  }));
+  d.returnValue = '';
+  d.showModal();
+  return new Promise((resolve) => {
+    d.addEventListener('close', () => resolve(/^\d+$/.test(d.returnValue) ? Number(d.returnValue) : -1), { once: true });
+  });
+}
+
 // ----------------------------------------------------------------- render --
 
 function render() {
@@ -802,15 +829,17 @@ function render() {
 
   // what to flash: the newest release for this unit unless something else was chosen
   const releases = releasesFor(state.profile);
-  if (!state.pick && releases.length) state.pick = releases[0].release;
+  // a bundle per unit is never chosen for the user: the page cannot tell the units apart
+  if (!state.pick && releases.length && !releases[0].unit) state.pick = releases[0].key;
   if (!state.pick && state.localFile) state.pick = 'file';
-  const options = [...releases.map((e, i) => [e.release, `fpvOS ${e.release}${i ? '' : ' · latest'}`]),
+  const options = [...releases.map((e) => [e.key,
+    `fpvOS ${e.release}${e.unitName ? ` · ${e.unitName}` : ''}${e.release === releases[0].release ? ' · latest' : ''}`]),
     // a test build's folder (one per build) is a line under its name in the list
     ...state.tests.map((t) => [`test:${t.path}`, `${t.path.split('/').pop()} · test`,
       t.path.includes('/') ? t.path.slice(0, t.path.lastIndexOf('/')) : '']),
     ...(state.localFile ? [['file', `Local file: ${state.localFile.name}`]] : [])];
   // only test builds: none is fetched before it is chosen
-  if (!state.pick && options.length) options.unshift(['', 'Choose a test build']);
+  if (!state.pick && options.length) options.unshift(['', releases.length ? 'Choose the firmware for your unit' : 'Choose a test build']);
   if (!options.length) options.push(['', state.catalog === undefined ? 'Looking for fpvOS releases…' : 'No fpvOS release for this device']);
   const key = JSON.stringify(options);
   if ($('release').dataset.key !== key) {
@@ -874,7 +903,7 @@ function render() {
   const image = state.image;
   const fromCatalog = !!image?.catalog;
   const img = fromCatalog ? null : image;
-  const current = pickedIsFile() ? !!img && img.file === pickedFile() : fromCatalog && image.catalog.release === state.pick;
+  const current = pickedIsFile() ? !!img && img.file === pickedFile() : fromCatalog && image.catalog.key === state.pick;
   $('image-details').hidden = !pickedIsFile() || !current;
   $('file').disabled = state.busy;
   $('file-info').hidden = !img;
@@ -916,7 +945,7 @@ function render() {
   $('flash').textContent = state.downloading ? 'Downloading…'
     : state.operation ? (fromCatalog ? 'Installing…' : 'Flashing…')
     : pickedIsFile() ? (plan.unlockSelected ? 'Unlock and flash' : 'Flash this file')
-    : entry ? `Install fpvOS ${entry.release}` : 'Install';
+    : entry ? `Install fpvOS ${entry.release}${entry.unitName ? ` · ${entry.unitName}` : ''}` : 'Install';
   $('cancel').hidden = !state.operation || !['unlock', 'clean', 'upload'].includes(currentStage);
   $('progress').hidden = !state.operation && !state.downloading && !state.flashed;
   $('keep-plugged').hidden = !state.operation;
@@ -931,6 +960,7 @@ function render() {
     : state.busy || state.connecting ? ''
     : installed ? 'Done. You can unplug the device.'
     : !state.pick ? (state.catalog === undefined ? 'Looking for fpvOS releases…'
+      : releases.length ? 'Choose the firmware for your unit. The wrong one leaves it with no picture.'
       : state.tests.length ? 'Choose a test build, or a local file.'
       : state.testDir ? 'No fpvOS release for this device, and no test build in test-firmware/. Choose a local file.'
       : 'This page has no fpvOS release for this device yet. Choose a local file.')
