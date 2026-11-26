@@ -20,6 +20,7 @@
     --accent: #b3ff00;
     --quiet: #8c9eb3;
     --warn: #ffb021;
+    --ok: #4ade80;
     --error: #ff5a52;
     --panel: color-mix(in srgb, var(--quiet) 9%, var(--ground));
     --line: color-mix(in srgb, var(--quiet) 24%, transparent);
@@ -51,7 +52,7 @@
   h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
   .lead { margin: 0; color: var(--quiet); }
   button.big { padding: 13px 34px; font-size: 15px; }
-  #start > button.big { margin: 4px 0 6px; }
+  #start > button.big { display: block; margin: 30px auto 6px; padding: 13px 52px; }
   #help { margin-top: 16px; }
   .tips { margin: 10px 0 12px; padding-left: 20px; color: var(--quiet); display: grid; gap: 6px; }
   .tips b, .note b { color: var(--text); font-weight: 600; }
@@ -68,10 +69,26 @@
   #developer { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
   #developer h3 { margin-top: 0; }
   .note { color: var(--quiet); margin: 4px 0 0; }
-  .supported { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 20px; }
-  .supported .label { font-weight: 600; font-size: 12px; letter-spacing: 0.16em; color: var(--quiet); margin-right: 4px; }
-  #devices { display: contents; list-style: none; }
-  #devices li { padding: 2px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13.5px; }
+  /* The supported devices: by brand, each brand's air units, then receivers,
+     then goggles; what fpvOS does on each, and whether that is verified. */
+  table.supported { width: 100%; margin: 14px 0 0; border-collapse: collapse; table-layout: fixed; }
+  table.supported caption, table.supported th { text-align: left; font-weight: 600; font-size: 12px; letter-spacing: 0.16em;
+    color: var(--quiet); text-transform: uppercase; }
+  table.supported caption { padding-bottom: 6px; }
+  /* not the page's other tables' look (borders, capitals, a third column hidden when narrow) */
+  table.supported th, table.supported td { border-bottom: 0; text-transform: none; letter-spacing: normal; }
+  table.supported td:nth-child(3) { display: table-cell; }
+  table.supported th { text-transform: uppercase; letter-spacing: 0.16em; font-size: 12px; }
+  table.supported tbody { border-top: 1px solid var(--line); }
+  table.supported th { vertical-align: top; padding: 10px 8px 0 0; }
+  table.supported td { padding: 7px 8px 7px 0; vertical-align: middle; font-size: 14px; }
+  table.supported .kind { color: var(--quiet); font-size: 13px; }
+  table.supported .spec { color: var(--data); font-family: var(--mono); font-size: 12px; padding-right: 0; }
+  .supported-note { margin: 16px 0 0; color: var(--quiet); font-size: 13px; }
+  .supported .mark, .supported-note .mark { color: var(--accent); margin-left: 2px; font-family: var(--mono); font-weight: 400; }
+  .status { font-size: 11px; white-space: nowrap; border: 1px solid; border-radius: 4px; padding: 0 5px; }
+  .status.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+  .status.exp { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
 
   section.panel {
     background: var(--panel);
@@ -323,7 +340,27 @@
   <section class="panel" id="start">
     <h1>Install fpvOS on your device</h1>
     <p class="lead">Plug your device into this computer with a USB cable, then press Connect.</p>
-    <div class="supported"><span class="label">SUPPORTED</span><ul id="devices"><li>Caddx Ascent Lite / Lite+</li><li>Caddx Ascent VRX</li><li>BETAFPV P1 Air</li><li>BETAFPV VR04 goggles / P1 HD VRX (experimental)</li><li>Skyzone SteadyDigital</li></ul></div>
+    <table class="supported">
+      <caption>Supported</caption>
+      <colgroup><col style="width: 84px"><col style="width: 190px"><col style="width: 66px"><col style="width: 96px"><col></colgroup>
+      <thead hidden><tr><th scope="col">Brand</th><th scope="col">Device</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">On fpvOS</th></tr></thead>
+      <tbody>
+        <tr><th scope="rowgroup" rowspan="4">Caddx</th><td>Ascent Lite+</td><td class="kind">air unit</td><td><span class="status ok">verified</span></td><td class="spec">720p60/100 864p120/144 1080p60/100</td></tr>
+        <tr><td>Ascent Lite</td><td class="kind">air unit</td><td><span class="status ok">verified</span></td><td class="spec">720p60/100 864p120 1080p60/100</td></tr>
+        <tr><td>Ascent VRX Pro<span class="mark" aria-hidden="true">*</span></td><td class="kind">receiver</td><td><span class="status ok">verified</span></td><td class="spec">HDMI, up to 1080p120</td></tr>
+        <tr><td>Ascent VRX</td><td class="kind">receiver</td><td><span class="status ok">verified</span></td><td class="spec">HDMI, up to 1080p60 or 720p120</td></tr>
+      </tbody>
+      <tbody>
+        <tr><th scope="rowgroup" rowspan="3">BETAFPV</th><td>P1 Air</td><td class="kind">air unit</td><td><span class="status ok">verified</span></td><td class="spec">720p90 1080p60</td></tr>
+        <tr><td>P1 HD VRX / Nano</td><td class="kind">receiver</td><td><span class="status exp">experimental</span></td><td class="spec">HDMI, up to 1080p60</td></tr>
+        <tr><td>VR04 HD / HD Pro</td><td class="kind">goggles</td><td><span class="status ok">verified</span></td><td class="spec">screen, up to 1080p60 or 720p60</td></tr>
+      </tbody>
+      <tbody>
+        <tr><th scope="rowgroup" rowspan="1">Skyzone</th><td>SteadyDigital</td><td class="kind">receiver</td><td><span class="status ok">verified</span></td><td class="spec">HDMI, up to 1080p60</td></tr>
+      </tbody>
+    </table>
+    <p class="supported-note"><span class="mark" aria-hidden="true">*</span> The Ascent VRX Pro is not installed from this page: write
+      <a href="https://github.com/gehee/fpvOS/releases/latest">its microSD image ↗</a> to a card instead.</p>
     <div id="start-note" class="notice" hidden></div>
     <button id="connect" class="solid big">Connect</button>
     <!-- shown once Connect finds a stock P1: it needs preparing before fpvOS can go on -->
