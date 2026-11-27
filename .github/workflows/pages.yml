@@ -107,9 +107,16 @@ jobs:
             gh release download "$tag" -R gehee/fpvOS -D "$RUNNER_TEMP/fw/$tag" -p '*.img' -p '*.fwu' || rm -rf "$RUNNER_TEMP/fw/$tag"
           done
           releases() {   # OUT: every release's images, newest first, after what OUT lists
+            # A point re-release (2026.10.beta4.1) is listed under its release's
+            # name (2026.10.beta4): the page does not tell the two files apart,
+            # and the newest one of a name is the one listed.
+            listed=" "
             for tag in $tags; do
               [ -d "$RUNNER_TEMP/fw/$tag" ] || continue
-              node tools/make-catalog.mjs --release "$tag" --out "$1" "$RUNNER_TEMP/fw/$tag"/*
+              name=$(printf '%s' "$tag" | sed -E 's/^(.*\.beta[0-9]+)\.[0-9]+$/\1/')
+              case "$listed" in *" $name "*) continue ;; esac
+              listed="$listed$name "
+              node tools/make-catalog.mjs --release "$name" --out "$1" "$RUNNER_TEMP/fw/$tag"/*
             done
           }
           releases _site/firmware
