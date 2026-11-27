@@ -69,33 +69,56 @@ export class WebSerialLink {
     if (requireSelection && !this.onNeedPort) throw new Error('Explicit port selection is required.');
     const start = Date.now();
     let picked = null, asked = false;
+    // What happens while waiting, for a bug report: each new failure once,
+    // and where the wait stands every 15 s (debug lines: in the copied log).
+    const id = (p) => { const i = p?.getInfo?.() ?? {}; return i.usbVendorId == null ? 'no USB id'
+      : `${i.usbVendorId.toString(16).padStart(4, '0')}:${(i.usbProductId ?? 0).toString(16).padStart(4, '0')}`; };
+    const seen = new Set();
+    const once = (msg) => { if (!seen.has(msg)) { seen.add(msg); this.log(msg, 'debug'); } };
+    let lastStatus = 0;
     for (;;) {
       if (signal?.aborted) throw new Error('Cancelled.');
       const waited = Date.now() - start;
       if (!asked && this.onNeedPort && (requireSelection || waited > 10000)) {
         asked = true;
-        this.onNeedPort().then((p) => { picked = p; });
+        this.onNeedPort().then((p) => { picked = p; this.log(`reconnect: port picked, USB ${id(p)}`, 'debug'); });
       }
       if (waited > (asked ? Math.max(timeoutMs, 5 * 60000) : timeoutMs)) throw new Error('The device did not come back.');
-      const ports = requireSelection ? [] : (await navigator.serial.getPorts()).filter((p) => this.acceptPort(p.getInfo()));
-      if (picked && !this.acceptPort(picked.getInfo())) { picked = null; asked = false; continue; }
+      const allowed = requireSelection ? [] : await navigator.serial.getPorts();
+      const ports = allowed.filter((p) => this.acceptPort(p.getInfo()));
+      if (waited - lastStatus >= 15000) {
+        lastStatus = waited;
+        this.log(`reconnect: waiting ${Math.round(waited / 1000)} s; ports this page may open: ${allowed.map(id).join(', ') || 'none'}`
+          + `${allowed.length !== ports.length ? ` (${ports.length} of them this unit's)` : ''}${picked ? `; picked ${id(picked)}` : asked ? '; waiting for a pick' : ''}`, 'debug');
+      }
+      if (picked && !this.acceptPort(picked.getInfo())) {
+        this.log(`reconnect: the picked port (USB ${id(picked)}) is not this unit's kind; pick it again`, 'warn');
+        picked = null; asked = false; continue;
+      }
       // Prefer the exact authorized port. If it is unavailable and several
       // devices share USB IDs, require the chooser rather than guessing a unit.
       const candidates = picked ? [picked] : ports.includes(originalPort)
         ? [originalPort] : ports.length <= 1 ? ports : [];
+      if (!picked && !candidates.length && ports.length > 1) once(`reconnect: ${ports.length} ports of this kind; waiting for a pick`);
       for (const p of candidates) {
         if (!this.acceptPort(p.getInfo())) continue;
         try {
           this.port = p;
           await this.open();
           if (acceptDevice && !await acceptDevice()) {
+            once(`reconnect: USB ${id(p)} opened but is not the unit expected`);
             await this.close();
             if (picked === p) { picked = null; asked = false; }
             continue;
           }
           if (asked) this.onPortBack?.();
+          this.log(`reconnect: opened USB ${id(p)} after ${Math.round((Date.now() - start) / 1000)} s`, 'debug');
           return;
-        } catch { await this.close(); /* not up yet, or the old dead port */ }
+        } catch (e) {
+          once(`reconnect: USB ${id(p)}${p === originalPort ? ' (the port from before)' : p === picked ? ' (picked)' : ''} `
+            + `did not open: ${e?.name ?? 'Error'}: ${e?.message ?? e}`);
+          await this.close(); /* not up yet, or the old dead port */
+        }
       }
       await sleep(500);
     }
