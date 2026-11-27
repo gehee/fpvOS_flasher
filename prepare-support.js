@@ -31,10 +31,11 @@ export function browserPrepareSupport(userAgent = '') {
 // publishes them as release assets; the file names below must match that
 // workflow's output. Both names are fixed, so the latest release is the
 // download, with nothing to change here per release - unless this commit names
-// a release of its own (RECOVERY_APP_RELEASE): a branch that needs an app the
-// latest one is not (the alpha page: the P1 ground units' recovery, in a
-// prerelease that never becomes latest). Back to null before it reaches main.
-export const RECOVERY_APP_RELEASE = 'recovery-app-v0.5.0-alpha1';
+// a release of its own (RECOVERY_APP_RELEASE): a page that needs an app the
+// latest one is not (the preview page: the P1 ground units' recovery, in a
+// prerelease named by its commit that never becomes latest, and that hands the
+// unit back to /preview/). Back to null before this commit becomes `live`.
+export const RECOVERY_APP_RELEASE = 'recovery-app-v0.5.0-387f0c8';
 // Served from localhost (e.g. local testing over an SSH tunnel), take the apps
 // from ./recovery-app/ beside the page instead, so the download works without a
 // published release.
