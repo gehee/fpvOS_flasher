@@ -153,7 +153,8 @@
   }
   .picker .name { flex: 1 1 auto; min-width: 0; }
   #release-button .name { overflow: hidden; text-overflow: ellipsis; }
-  #release-list .name { white-space: normal; overflow-wrap: anywhere; }
+  /* tags that leave the name too little room go under it: never a name a letter per line */
+  #release-list .name { white-space: normal; overflow-wrap: break-word; flex: 1 1 12em; }
   .picker .name small { display: block; margin-top: 2px; color: var(--quiet); font-size: 12px; }
   #release-button:hover:not(:disabled) { border-color: var(--quiet); color: var(--text); }
   #release-button::after {
@@ -169,7 +170,7 @@
     box-shadow: 0 12px 28px color-mix(in srgb, #000 45%, transparent);
   }
   #release-list li {
-    display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 6px; cursor: pointer;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 9px 12px; border-radius: 6px; cursor: pointer;
   }
   #release-list li.active { background: color-mix(in srgb, var(--data) 12%, transparent); }
   #release-list li[aria-selected="true"] { color: var(--accent); }
