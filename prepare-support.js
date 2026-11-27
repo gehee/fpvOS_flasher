@@ -35,7 +35,7 @@ export function browserPrepareSupport(userAgent = '') {
 // latest one is not (the preview page: the P1 ground units' recovery, in a
 // prerelease named by its commit that never becomes latest, and that hands the
 // unit back to /preview/). Back to null before this commit becomes `live`.
-export const RECOVERY_APP_RELEASE = 'recovery-app-v0.5.0-387f0c8';
+export const RECOVERY_APP_RELEASE = 'recovery-app-v0.5.0-5557639';
 // Served from localhost (e.g. local testing over an SSH tunnel), take the apps
 // from ./recovery-app/ beside the page instead, so the download works without a
 // published release.
