@@ -4,7 +4,7 @@ export { enterP1Bootloader, enterSteadyDigitalBootloader, P1_STOCK_USB, STEADYDI
 export const P1_RECOVERY_BASE = new URL('../assets/p1-updater/browser-v1/', import.meta.url);
 export const P1_RECOVERY_MANIFEST_SHA256 = '0e67849fc275e1a341a104eb662e881c2b70b235976c9b9ebee051fa75220e5b';
 export const P1_GND_RECOVERY_BASE = new URL('../assets/p1-gnd-updater/browser-v1/', import.meta.url);
-export const P1_GND_RECOVERY_MANIFEST_SHA256 = '8398175b06463cf9358de6fb559dfebc9f52fc7e952b9c7bc126f89c827a4a2d';
+export const P1_GND_RECOVERY_MANIFEST_SHA256 = 'eaa5d67aadf91baa5036ce4d9cabd1682b13fad677e6ab760f7f6c7c83f9dc45';
 export const STEADYDIGITAL_RECOVERY_BASE = new URL('../assets/steadydigital-updater/browser-v1/', import.meta.url);
 export const STEADYDIGITAL_RECOVERY_MANIFEST_SHA256 = '6b8f2b1e2ef8bf5603db10e0767177ce2c9daf93a45215ad8829bc04804f46f3';
 async function fetchBytes(name, limit, fetcher, signal, base = P1_RECOVERY_BASE) {

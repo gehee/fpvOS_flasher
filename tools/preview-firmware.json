@@ -5,7 +5,7 @@
     "first in /preview/'s catalog, every board included (make-catalog.mjs --every-board).",
     "The live page never reads this. Files: two gists, each at a fixed revision: the",
     "release candidate built at the 2026.11.beta1 tag, and the BETAFPV P1 ground units'",
-    "bundles, built from fpvOS f6de323 as 2026.11.beta1 (the first gist is full). The P1",
+    "bundles, built from fpvOS af6ad4b as 2026.11.beta1 (the first gist is full). The P1",
     "ground bundles have not run on hardware."
   ],
   "release": "2026.11.beta1",
@@ -27,18 +27,18 @@
     },
     {
       "name": "fpvos-p1-gnd-goggles-2026.11.beta1.fwu",
-      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/97e6d29050719b7a444247a32e27e350767a7149/fpvos-p1-gnd-goggles-2026.11.beta1.fwu",
-      "sha256": "0e760de22062db5e0c2b2cdb34c08c9a9c43e6ed25eb4fa61c17c29603c26fd1"
+      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/d514f62ad285db51436e1490f5d6bf9a6f8e6a3f/fpvos-p1-gnd-goggles-2026.11.beta1.fwu",
+      "sha256": "90e3fad7777e8fba29ec8cef562c50f3fa143133137276cbb5d33158564111be"
     },
     {
       "name": "fpvos-p1-gnd-goggles-pro-2026.11.beta1.fwu",
-      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/97e6d29050719b7a444247a32e27e350767a7149/fpvos-p1-gnd-goggles-pro-2026.11.beta1.fwu",
-      "sha256": "33308d1a85bf94beaefeae6121094b33be77bf282ab31a0fd70d98f1b73cf833"
+      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/d514f62ad285db51436e1490f5d6bf9a6f8e6a3f/fpvos-p1-gnd-goggles-pro-2026.11.beta1.fwu",
+      "sha256": "acbda499de3e97c6586c359b70841de32062c2fafad0d52a8806eb098f305dfa"
     },
     {
       "name": "fpvos-p1-gnd-vrx-2026.11.beta1.fwu",
-      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/97e6d29050719b7a444247a32e27e350767a7149/fpvos-p1-gnd-vrx-2026.11.beta1.fwu",
-      "sha256": "6462d0406c0159039f41b1334f618c98ceefd388953f6b72d4509af7afb2edb7"
+      "url": "https://gist.githubusercontent.com/gehee/76dd1116ea9923163293f49cb18b34b6/raw/d514f62ad285db51436e1490f5d6bf9a6f8e6a3f/fpvos-p1-gnd-vrx-2026.11.beta1.fwu",
+      "sha256": "1f4984465799986294baebc4531186df9f1d25cced5eba86a115e1de73d1e563"
     },
     {
       "name": "fpvos-steadydigital-2026.11.beta1.fwu",

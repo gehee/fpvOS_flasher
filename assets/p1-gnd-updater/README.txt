@@ -52,8 +52,7 @@ factory calibration and user settings.
 Source and assets
 -----------------
 Kernel and device tree: https://github.com/gehee/fpvOS
-Commit: f6de3231e0ef2805b85c989d07a311fbb42df236 (manifest.json source_commit), on the
-p1-gnd branch.
+Commit: af6ad4bc3fd58e5e8eb6177f4cb5a91ae33b78e9 (manifest.json source_commit), on main.
 Build: ./build.sh p1-gnd && ./build.sh p1-gnd recovery
 Files: output/p1-gnd/images/kernel-recovery.img (shipped here as kernel.img)
 and betafpv-p1-gnd.dtb
