@@ -34,6 +34,8 @@ export const matchesFpvosSteadyDigital = (info) => info.name === 'fpvOS updater'
 
 export const FPVOS_STEADYDIGITAL = defineDevice({
   meta: {
+    // fpvOS and its recovery answer SSH here (root/root): fpvos-diag's report
+    diagnostics: Object.freeze({ host: '192.168.3.1' }),
     id: 'fpvos-steadydigital', name: 'Skyzone SteadyDigital · fpvOS', models: ['Skyzone SteadyDigital · fpvOS'],
     // fpvOS's serial port, and in bridge mode (fpvOS_usb) the AR8030's boot ROM,
     // then the running chip, the serial port kept with the updater on it

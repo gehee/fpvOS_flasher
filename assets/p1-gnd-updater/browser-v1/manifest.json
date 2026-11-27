@@ -4,7 +4,7 @@
   "board": "p1-gnd",
   "board_id": 1345406788,
   "source": "https://github.com/gehee/fpvOS",
-  "source_commit": "af6ad4bc3fd58e5e8eb6177f4cb5a91ae33b78e9",
+  "source_commit": "9fb3b6dd9826c1b2cecc84a4222a887a9441df59",
   "build_config": "p1gnd_defconfig, kernel with board/p1-gnd/linux-recovery.fragment",
   "supported_stock_firmware": [
     "1.0.44.rel",
@@ -15,8 +15,8 @@
   ],
   "files": {
     "kernel.img": {
-      "size": 4236544,
-      "sha256": "488305627d5efb88ae977fdddca082fc9c0da1c3d4c03098c7a9ab950eab9d2e",
+      "size": 4240896,
+      "sha256": "ab5935c57103459fcf8751bdde068bcd488777aff48b1c925e2e4a77892c9cb7",
       "address": 608174080
     },
     "betafpv-p1-gnd.dtb": {

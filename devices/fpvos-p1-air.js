@@ -17,6 +17,8 @@ export const matchesFpvosP1Air = (info) => info.name === 'fpvOS updater'
 
 export const FPVOS_P1_AIR = defineDevice({
   meta: {
+    // fpvOS and its recovery answer SSH here (root/root): fpvos-diag's report
+    diagnostics: Object.freeze({ host: '192.168.2.1' }),
     id: 'fpvos-p1-air', name: 'BETAFPV P1 Air · fpvOS',
     models: ['BETAFPV P1 Air · Stock', 'BETAFPV P1 Air · fpvOS'],
     // fpvOS's serial port, and in bridge mode (fpvOS_usb) the AR8030's boot ROM,

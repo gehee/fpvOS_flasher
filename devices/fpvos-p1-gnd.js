@@ -73,6 +73,8 @@ const STOCK = 'stock firmware 1.0.44, 2.0.5, 2.0.6, 2.0.8 or 2.1.4 (the page det
 
 export const FPVOS_P1_GND = defineDevice({
   meta: {
+    // fpvOS and its recovery answer SSH here (root/root): fpvos-diag's report
+    diagnostics: Object.freeze({ host: '192.168.3.1' }),
     id: 'fpvos-p1-gnd', name: 'BETAFPV P1 ground unit · fpvOS',
     models: ['BETAFPV VR04 HD FPV Goggles · Stock', 'BETAFPV VR04 HD Pro FPV Goggles · Stock', 'BETAFPV P1 HD VRX (Standard) · Stock', 'BETAFPV P1 HD VRX (Nano) · Stock',
       'BETAFPV VR04 HD FPV Goggles · fpvOS', 'BETAFPV VR04 HD Pro FPV Goggles · fpvOS', 'BETAFPV P1 HD VRX (Standard) · fpvOS', 'BETAFPV P1 HD VRX (Nano) · fpvOS'],

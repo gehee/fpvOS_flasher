@@ -66,6 +66,21 @@ function showLogLine(l) {
   box.scrollTop = box.scrollHeight;
 }
 
+// The deployed page's commit (its module URLs carry it), once per log.
+let pageLogged = false;
+function logPage() {
+  if (pageLogged) return;
+  pageLogged = true;
+  const rev = /\/releases\/([0-9a-f]{40})\//.exec(import.meta.url)?.[1];
+  log(`page ${location.origin}${location.pathname}${rev ? ` at ${rev.slice(0, 12)}` : ' (unversioned)'}; ${navigator.userAgent}`, 'debug');
+}
+
+// Everything FIND_DEVICE said, for a bug report.
+function logUnit(info) {
+  log(`unit: name "${info.name}", firmware "${info.firmware}", sdk "${info.sdk}", hw "${info.hardware}", `
+    + `sn "${info.serial}", status ${info.status}, detail "${info.detail}", chunk ${info.maxChunk}, temp ${info.cpuTemp}`, 'debug');
+}
+
 function logText() {
   return logLines.map((l) => `${l.t} ${l.level.padEnd(5)} ${l.msg}`).join('\n');
 }
@@ -126,12 +141,14 @@ async function openPort(port) {
   // which device this is, and whether another one with the same id is
   // allowed too (the browser does not tell their serial numbers)
   const same = (await navigator.serial.getPorts().catch(() => [])).filter((p) => usbId(p) === usbId(port)).length;
+  logPage();
   log(`opened the port of USB device ${usbId(port)}${same > 1 ? ` (${same} such devices allowed on this page)` : ''}`);
   try {
     state.info = await state.session.deviceInfo({ timeoutMs: usbProfile.transport.timeouts.connect ?? 6000 });
     state.profile = profileForDevice(state.info, port.getInfo());
     state.unlockOverride = null;
     log(`connected: ${state.info.firmware || state.info.name} (hw ${state.info.hardware}, sn ${state.info.serial})`);
+    logUnit(state.info);
     // Back from bridge mode, the unit is on USB again before it has reloaded
     // its radio, and says bridge until then: ask until it says the mode asked for.
     const want = state.expectMode;
@@ -570,11 +587,17 @@ async function flash() {
   render();
   setProgress({ stage: 'clean', frac: 0, text: 'Starting' });
   const t0 = Date.now();
+  // each stage as it starts, in the log, and the last one reached if it fails
+  let stage = null;
+  const progress = (p) => {
+    if (p.stage !== stage) { stage = p.stage; log(`step ${p.stage}: ${p.text ?? ''}`, 'debug'); }
+    setProgress(p);
+  };
   try {
     const after = await flashFirmware(session, profile, img, {
       info, usbInfo: state.link.port.getInfo(),
       unlock,
-      progress: setProgress, log, signal: abort.signal,
+      progress, log, signal: abort.signal,
     });
     const secs = Math.round((Date.now() - t0) / 1000);
     // An fpvOS release: said to run only once the unit, back, says it does.
@@ -588,7 +611,11 @@ async function flash() {
     log(state.flashed.text);
   } catch (e) {
     state.flashed = { ok: false, text: e.message };
-    log(`flash failed: ${e.message}`, 'error');
+    log(`flash failed${stage ? ` at ${stage}` : ''}: ${e.message}`, 'error');
+    const host = profile.meta.diagnostics?.host;
+    if (host && profile.meta.describe(info).fpvos)
+      log(`For the full picture, while the unit is still in fpvOS or its recovery: ssh root@${host} fpvos-diag --dump > fpvos-diag.txt `
+        + '(password root), and send that file with this log.', 'warn');
     setProgress({ stage: 'failed', frac: null, text: 'Failed' });
   } finally {
     state.operation = null;

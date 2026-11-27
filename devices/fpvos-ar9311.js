@@ -24,6 +24,8 @@ export const matchesFpvosAr9311 = (info) => ['fpvOS updater', 'fpvOS AR9311 upda
 
 export const FPVOS_AR9311 = defineDevice({
   meta: {
+    // fpvOS and its recovery answer SSH here (root/root): fpvos-diag's report
+    diagnostics: Object.freeze({ host: '192.168.3.1' }),
     id: 'fpvos-ar9311', name: 'Ascent VRX · fpvOS', models: ['Ascent VRX · fpvOS'],
     usb: [{ usbVendorId: 0x1d6b, usbProductId: 0x0104 }],
     deviceVersion: () => null,
