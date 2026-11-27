@@ -5,7 +5,7 @@
 import { LinkLostError, deviceModeOf, deviceModeRequest } from './transports/ascent.js';
 import { WebSerialLink } from './transports/web-serial.js';
 import {
-  USB_FILTERS, CONNECT_FILTERS, getProfile, profileForUsb, profileForDevice, preparationsForUsb,
+  USB_FILTERS, CONNECT_FILTERS, getProfile, profileForUsb, profileForDevice, preparationsForUsb, leftInUpdateMode,
 } from './devices/index.js';
 import { prepareFirmware, evaluateSelection, flashFirmware, installResult } from './flasher.js';
 import { formatBytes } from './devices/common.js';
@@ -24,6 +24,7 @@ const state = {
   session: null,
   info: null,
   profile: null,     // positively identified connected hardware, never a UI override
+  stranded: null,    // the profile of a unit an earlier attempt left in update mode (a power cycle restarts it)
   unlockOverride: null, // null = version-based automatic selection; boolean = manual choice
   prepAssets: null,  // the recovery set being fetched for step 2 (a promise)
   prepChoice: null,  // the stock unit being prepared: { profile, unit, ui } (devices/index.js preparationsForUsb)
@@ -85,6 +86,62 @@ function logText() {
   return logLines.map((l) => `${l.t} ${l.level.padEnd(5)} ${l.msg}`).join('\n');
 }
 
+// -------------------------------------------------------------- other tabs --
+
+// Every tab of this site may open a unit it was allowed before, and a serial
+// port opens in one place at a time. So a tab at work on a unit (installing,
+// preparing) holds UNIT_LOCK, and no other tab opens a unit on its own while
+// it is held; a tab that cannot open a port asks the others to let go of it.
+const UNIT_LOCK = 'fpvos-flasher-unit';
+const tabs = 'BroadcastChannel' in window ? new BroadcastChannel('fpvos-flasher') : null;
+
+// Takes the lock for the work about to start and returns its release. Never
+// waits: a second tab at work on another unit goes ahead without it.
+async function holdUnitLock() {
+  if (!navigator.locks) return () => {};
+  let release = () => {};
+  await new Promise((held) => {
+    navigator.locks.request(UNIT_LOCK, { ifAvailable: true }, (lock) => {
+      if (!lock) { held(); return null; }
+      return new Promise((r) => { release = r; held(); });
+    });
+  });
+  return release;
+}
+
+async function anotherTabAtWork() {
+  if (state.busy || !navigator.locks?.query) return false;
+  const { held = [] } = await navigator.locks.query().catch(() => ({}));
+  return held.some((l) => l.name === UNIT_LOCK);
+}
+
+// Asks the other tabs to close this kind of port if they have it open and are
+// idle; at most every few seconds, as a reconnect retries.
+let releaseAsked = 0;
+function askTabsToRelease(id) {
+  if (!tabs || Date.now() - releaseAsked < 3000) return;
+  releaseAsked = Date.now();
+  tabs.postMessage({ type: 'release', usb: id });
+}
+tabs?.addEventListener('message', async (e) => {
+  if (e.data?.type !== 'release' || !state.link || state.busy || state.connecting) return;
+  if (usbId(state.link.port) !== e.data.usb) return;
+  log('another flasher tab needs this unit: let go of it here', 'warn');
+  await disconnect();
+  state.notice = 'Another tab of this page is working with the unit. Use that tab, or close it and press Connect here.';
+  render();
+});
+
+// Plugged in, or this tab shown again: open a unit this page was allowed
+// before, unless this tab is in the background or another one is at work.
+async function autoConnect(port) {
+  if (state.busy || state.link || state.connecting || document.visibilityState !== 'visible') return;
+  if (await anotherTabAtWork()) return;
+  const ports = port ? [port] : await navigator.serial.getPorts().catch(() => []);
+  const p = ports.find(isOurs);
+  if (p) openPort(p);
+}
+
 // ------------------------------------------------------------------ unit --
 
 async function connect() {
@@ -123,17 +180,27 @@ async function openPort(port) {
     log,
     onNeedPort: askForPort,
     onPortBack: () => { $('reselect').hidden = true; portRequest = null; },
+    onOpenFailed: (p) => askTabsToRelease(usbId(p)),
   });
   setUnitStatus('connecting', 'Connecting…');
   render();
   try {
     await link.open();
-  } catch (e) {
-    setUnitStatus('error', "Could not open the port. Is another program (the vendor's PC tool, a terminal) using it?");
-    log(`open: ${e.message}`, 'error');
-    state.connecting = false;
-    render();
-    return;
+  } catch (first) {
+    // another tab of this page may have it: ask, then try once more
+    log(`open: ${first.message}`, 'warn');
+    askTabsToRelease(usbId(port));
+    await new Promise((r) => setTimeout(r, 1500));
+    try {
+      await link.open();
+    } catch (e) {
+      setUnitStatus('error', 'Could not open the port. Close any other tab of this page, and any program that '
+        + "may use it (the vendor's PC tool, a configurator, a serial terminal), then press Connect again.");
+      log(`open: ${e.message}`, 'error');
+      state.connecting = false;
+      render();
+      return;
+    }
   }
   state.link = link;
   state.session = usbProfile.transport.protocol.createSession(link, log, usbProfile.transport);
@@ -145,7 +212,10 @@ async function openPort(port) {
   log(`opened the port of USB device ${usbId(port)}${same > 1 ? ` (${same} such devices allowed on this page)` : ''}`);
   try {
     state.info = await state.session.deviceInfo({ timeoutMs: usbProfile.transport.timeouts.connect ?? 6000 });
-    state.profile = profileForDevice(state.info, port.getInfo());
+    // Left in update mode by an earlier attempt: no install from there (its
+    // identity cannot be checked); a power cycle starts it normally again.
+    state.stranded = leftInUpdateMode(state.info, port.getInfo());
+    state.profile = state.stranded ? null : profileForDevice(state.info, port.getInfo());
     state.unlockOverride = null;
     log(`connected: ${state.info.firmware || state.info.name} (hw ${state.info.hardware}, sn ${state.info.serial})`);
     logUnit(state.info);
@@ -159,13 +229,16 @@ async function openPort(port) {
       state.info = await state.session.deviceInfo({ timeoutMs: 3000 });
     }
     if (want) log(`the unit says ${deviceModeOf(state.info) ?? state.info.detail}`);
-    setUnitStatus(state.profile ? 'ok' : 'error', state.profile ? 'Connected' : 'Connected device has no supported hardware profile.');
+    if (state.stranded) log(`this ${state.stranded.meta.updateModeModel} is still in update mode from an earlier attempt: `
+      + 'unplug it and its power, plug it back in, then press Connect again', 'warn');
+    setUnitStatus(state.profile ? 'ok' : 'error', state.profile ? 'Connected'
+      : state.stranded ? 'Still in update mode from an earlier attempt.' : 'Connected device has no supported hardware profile.');
   } catch (e) {
     log(`no answer to FIND_DEVICE: ${e.message}`, 'error');
     setUnitStatus('error', 'The port opened but the device does not answer. Wait for it to finish booting, then reconnect. '
       + 'If other USB devices are plugged in (a flight controller, an ESP32 board), unplug them and plug the unit straight into the computer.');
     await link.close();
-    state.link = state.session = state.info = state.profile = null;
+    state.link = state.session = state.info = state.profile = state.stranded = null;
   }
   state.connecting = false;
   // a downloaded image belongs to the unit it was fetched for; a chosen file is
@@ -186,7 +259,7 @@ function watchLink(link) {
 }
 
 function disconnected() {
-  state.link = state.session = state.info = state.profile = null;
+  state.link = state.session = state.info = state.profile = state.stranded = null;
   state.unlockOverride = null;
   setUnitStatus('idle', 'Not connected');
   log('device disconnected');
@@ -205,7 +278,9 @@ let portRequest = null;
 
 function askForPort() {
   $('reselect').hidden = false;
-  log('the device has not reappeared yet; the browser may need it selected again', 'warn');
+  $('stage-text').textContent = 'Click “Select the device again” and pick the unit';
+  log('The unit restarted, and the browser needs it picked again: click “Select the device again” and choose it. '
+    + 'If it is not in the list, wait a few seconds and click again.', 'warn');
   return new Promise((resolve) => { portRequest = resolve; });
 }
 
@@ -313,6 +388,7 @@ async function prepareStock(loadRecovery, presetPort = null) {
   preparationAbort = new AbortController();
   const signal = preparationAbort.signal;
   const progress = (text) => { $('p1-preparation-status').textContent = text; };
+  const releaseLock = await holdUnitLock();
   render();
   try {
     if (loadRecovery) {
@@ -329,8 +405,14 @@ async function prepareStock(loadRecovery, presetPort = null) {
       log(`${ui.name} recovery loaded through WebHID; connect its new serial port to install firmware.`);
     } else {
       const port = presetPort ?? await navigator.serial.requestPort({ filters: [preparation.serialFilter] });
-      state.prepAssets = preparation.loadAssets({ signal, unit });   // fetched and verified now, used by step 2
-      state.prepAssets.catch(() => {});
+      // The recovery files are fetched and checked before the unit restarts:
+      // a page updated since it was opened finds them gone while the unit is
+      // still on stock, and step 2 then has them at hand (its click is still
+      // fresh when the bootloader chooser opens).
+      progress('Fetching and checking the recovery files…');
+      const assets = preparation.loadAssets({ signal, unit });
+      await assets;
+      state.prepAssets = assets;
       await preparation.enterBootloader(port, { signal });
       state.p1Stage = 'recovery';
       progress(`Restart requested. Wait for USB download gadget, then select it with “${ui.load.replace(/^\d+\. /, '')}”. If it stays as Sirius, allow stock firmware to finish starting and retry “${ui.restart.replace(/^\d+\. /, '')}”.`);
@@ -338,9 +420,10 @@ async function prepareStock(loadRecovery, presetPort = null) {
     }
   } catch (e) {
     const message = e.name === 'NotFoundError' ? 'No device selected. You can try again.'
+      : pageWasUpdated(e) ? `${STALE}${loadRecovery ? ' The unit is in USB download mode: power-cycle it first, so it starts its installed firmware again.' : ' Nothing was done to the unit.'}`
       : `${e.message} If the unit is still in USB download mode, retry “${ui.load.replace(/^\d+\. /, '')}”; power-cycle it to return to its installed firmware.`;
     progress(message); log(`${ui.name} preparation: ${message}`, 'warn');
-  } finally { state.preparing = false; preparationAbort = null; render(); }
+  } finally { releaseLock?.(); state.preparing = false; preparationAbort = null; render(); }
 }
 
 // --------------------------------------------------------------- firmware --
@@ -555,6 +638,11 @@ async function go() {
   if (state.image?.catalog === entry && state.pick === entry.key && canFlash()) await flash();
 }
 
+// A file of this page's own version is gone: the page was updated while open.
+const STALE = 'This page was updated since you opened it, and the files this step needs went with the old version. '
+  + 'Reload the page (Ctrl+F5, or ⌘⇧R on a Mac), then start again.';
+const pageWasUpdated = (e) => /HTTP 404\b/.test(e?.message ?? '');
+
 // Problems from the image and the unit together: [{level, text}]
 function selection() {
   return state.operation?.plan ?? evaluateSelection({ info: state.info, profile: state.profile, image: state.image,
@@ -589,6 +677,7 @@ async function flash() {
   const t0 = Date.now();
   // each stage as it starts, in the log, and the last one reached if it fails
   let stage = null;
+  const releaseLock = await holdUnitLock();
   const progress = (p) => {
     if (p.stage !== stage) { stage = p.stage; log(`step ${p.stage}: ${p.text ?? ''}`, 'debug'); }
     setProgress(p);
@@ -612,12 +701,17 @@ async function flash() {
   } catch (e) {
     state.flashed = { ok: false, text: e.message };
     log(`flash failed${stage ? ` at ${stage}` : ''}: ${e.message}`, 'error');
+    if (pageWasUpdated(e)) { state.flashed = { ok: false, text: STALE }; log(STALE, 'warn'); }
+    // stock's updater stays in update mode until it is power-cycled
+    if (profile.meta.leftInUpdateMode && ['unlock', 'clean', 'upload'].includes(stage))
+      log('The unit may still be in update mode: unplug it and its power, plug it back in, then press Connect again.', 'warn');
     const host = profile.meta.diagnostics?.host;
     if (host && profile.meta.describe(info).fpvos)
       log(`For the full picture, while the unit is still in fpvOS or its recovery: ssh root@${host} fpvos-diag --dump > fpvos-diag.txt `
         + '(password root), and send that file with this log.', 'warn');
     setProgress({ stage: 'failed', frac: null, text: 'Failed' });
   } finally {
+    releaseLock?.();
     state.operation = null;
     abort = null;
     $('reselect').hidden = true;
@@ -849,9 +943,10 @@ function render() {
   $('stock-switch').disabled = state.busy || state.connecting;
   $('update-mode').hidden = deviceMode !== 'update';
   $('mode-restart').disabled = state.busy || state.connecting;
-  $('firmware').hidden = deviceMode === 'bridge';
+  $('firmware').hidden = deviceMode === 'bridge' || !!state.stranded;
   const about = info && state.profile ? state.profile.meta.describe(info) : null;
-  $('device-name').textContent = about?.model ?? (info ? 'Unsupported device' : 'Connecting…');
+  $('device-name').textContent = about?.model ?? (state.stranded ? `${state.stranded.meta.updateModeModel}, in update mode`
+    : info ? 'Unsupported device' : 'Connecting…');
   $('device-firmware').textContent = about ? `Runs ${about.firmware}` : '';
 
   // what to flash: the newest release for this unit unless something else was chosen
@@ -984,6 +1079,8 @@ function render() {
     $('result').textContent = state.flashed.text;
   }
   $('hint').textContent = !state.link ? 'Connect a device first.'
+    : state.stranded ? 'An earlier attempt left it in update mode, where it cannot be checked. Unplug it and its power, '
+      + 'wait a few seconds, plug it back in, then press Connect again: it starts normally, and the install can start over.'
     : state.busy || state.connecting ? ''
     : installed ? 'Done. You can unplug the device.'
     : !state.pick ? (state.catalog === undefined ? 'Looking for fpvOS releases…'
@@ -1142,13 +1239,9 @@ function init() {
   window.addEventListener('drop', (e) => { e.preventDefault(); chooseLocal(e.dataTransfer.files[0]); });
 
   // plug in = connect, for a unit this page was allowed before
-  navigator.serial.addEventListener('connect', (e) => {
-    if (!state.busy && isOurs(e.target)) openPort(e.target);
-  });
-  navigator.serial.getPorts().then((ports) => {
-    const p = ports.find(isOurs);
-    if (p) openPort(p);
-  });
+  navigator.serial.addEventListener('connect', (e) => { if (isOurs(e.target)) autoConnect(e.target); });
+  document.addEventListener('visibilitychange', () => autoConnect());
+  autoConnect();
 }
 
 init();

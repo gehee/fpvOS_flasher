@@ -160,6 +160,11 @@ export const ASCENT_VRX = defineDevice({
     id: 'ascent-vrx', name: 'Ascent VRX · Stock', models: ['Ascent VRX · Stock'],
     usb: [{ usbVendorId: 0x1d75, usbProductId: 0x0101 }],
     describe: (info) => ({ model: 'Caddx Ascent VRX', fpvos: false, firmware: stockFirmware(info) }),
+    // In update mode from an earlier attempt: its factory identity is hidden
+    // (blank serial, V0.0-0.0), so nothing can be checked against it. A power
+    // cycle starts it normally again.
+    leftInUpdateMode: (info) => matchesVrx(info) && info.hardware === cleanHardware && !info.serial,
+    updateModeModel: 'Caddx Ascent VRX',
     identity: { matches: matchesVrx, normalMatches: sameFactoryIdentity, updateMatches: vrxUpdateMatches },
     image: aswImage({ prefix: 'Ascent_G_Gnd', board: 5, parse: parseVrx, capacity: true,
       checks: (p) => [

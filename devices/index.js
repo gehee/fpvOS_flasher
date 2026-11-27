@@ -40,3 +40,7 @@ export const profilesForUsb = (info) => PROFILES.filter((p) => p.meta.usb.some((
 export const profileForUsb = (info) => profilesForUsb(info)[0] ?? null;
 export const profileForDevice = (info, usbInfo) => PROFILES.find((p) => p.meta.identity.matches(info)
   && (!usbInfo || profilesForUsb(usbInfo).includes(p))) ?? null;
+// The profile of a unit an earlier attempt left in update mode, which can only
+// be started normally again by a power cycle; null for any other unit.
+export const leftInUpdateMode = (info, usbInfo) => PROFILES.find((p) => p.meta.leftInUpdateMode?.(info)
+  && (!usbInfo || profilesForUsb(usbInfo).includes(p))) ?? null;

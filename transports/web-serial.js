@@ -4,13 +4,15 @@ import { LinkLostError, sleep } from './ascent.js';
 
 export class WebSerialLink {
   constructor(port, { serial = { baudRate: 115200, bufferSize: 65536 }, acceptPort = () => true,
-    filters = [], onNeedPort, onPortBack, log = () => {} } = {}) {
+    filters = [], onNeedPort, onPortBack, onOpenFailed, log = () => {} } = {}) {
     this.port = port;
     this.serial = serial;
     this.acceptPort = acceptPort;
     this.filters = filters;
     this.onNeedPort = onNeedPort;
     this.onPortBack = onPortBack;
+    // a port that would not open (another tab or program may hold it)
+    this.onOpenFailed = onOpenFailed;
     this.log = log;
     this.onBytes = null;
     this.onClose = null;
@@ -75,13 +77,13 @@ export class WebSerialLink {
       : `${i.usbVendorId.toString(16).padStart(4, '0')}:${(i.usbProductId ?? 0).toString(16).padStart(4, '0')}`; };
     const seen = new Set();
     const once = (msg) => { if (!seen.has(msg)) { seen.add(msg); this.log(msg, 'debug'); } };
-    let lastStatus = 0;
+    let lastStatus = 0, pickedFails = 0;
     for (;;) {
       if (signal?.aborted) throw new Error('Cancelled.');
       const waited = Date.now() - start;
       if (!asked && this.onNeedPort && (requireSelection || waited > 10000)) {
         asked = true;
-        this.onNeedPort().then((p) => { picked = p; this.log(`reconnect: port picked, USB ${id(p)}`, 'debug'); });
+        this.onNeedPort().then((p) => { picked = p; pickedFails = 0; this.log(`reconnect: port picked, USB ${id(p)}`, 'debug'); });
       }
       if (waited > (asked ? Math.max(timeoutMs, 5 * 60000) : timeoutMs)) throw new Error('The device did not come back.');
       const allowed = requireSelection ? [] : await navigator.serial.getPorts();
@@ -118,6 +120,14 @@ export class WebSerialLink {
           once(`reconnect: USB ${id(p)}${p === originalPort ? ' (the port from before)' : p === picked ? ' (picked)' : ''} `
             + `did not open: ${e?.name ?? 'Error'}: ${e?.message ?? e}`);
           await this.close(); /* not up yet, or the old dead port */
+          this.onOpenFailed?.(p, e);
+          // The port the user picked keeps failing: say why, where they see
+          // it, and offer the pick again rather than retrying it in silence.
+          if (p === picked && ++pickedFails >= 6) {
+            this.log(`The port you picked (USB ${id(p)}) does not open: ${e?.message ?? e} `
+              + 'Close any other flasher tab or program using it, then select the device again.', 'warn');
+            picked = null; asked = false; pickedFails = 0;
+          }
         }
       }
       await sleep(500);

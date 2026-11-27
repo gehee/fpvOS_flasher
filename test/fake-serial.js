@@ -24,6 +24,9 @@
     ?? `${type === 'air' ? 'Ascent_H_Sky' : 'Ascent_G_Gnd'}_${params.get('fw') ?? (type === 'air' ? '18_21_10' : '17_5_3')}`;
   const staged = new Map();
   const fake = window.__fake = Object.assign({ regrant: true, bootMs: 600, log: [] }, window.__fake || {});
+  // ?openFails=N: after the user picks a port again, it fails to open N times
+  // (held by something else), then opens
+  fake.openFailsLeft = Number(params.get('openFails') ?? 0);
   fake.starts = []; fake.rebootPayloads = [];
   const serial = new EventTarget();
   let A = null;   // protocol module, loaded on first use
@@ -48,6 +51,7 @@
 
     async open() {
       if (!this.dev.present || this.dev.port !== this) throw new DOMException('Failed to open serial port.', 'NetworkError');
+      if (fake.requested && fake.openFailsLeft > 0) { fake.openFailsLeft--; throw new DOMException('Failed to open serial port.', 'NetworkError'); }
       if (this.readable) throw new DOMException('The port is already open.', 'InvalidStateError');
       A = A || await import('/transports/ascent.js');
       this.readable = new ReadableStream({ start: (c) => { this.ctrl = c; } });

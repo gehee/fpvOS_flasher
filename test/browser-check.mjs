@@ -231,6 +231,33 @@ async function scenario(name, query, { reselect, file = img, source = img, profi
   return fail;
 }
 
+// A unit an earlier attempt left in update mode: named as such, no install
+// offered, and told to power-cycle it.
+async function leftInUpdateMode(name, query, model) {
+  console.log(`--- ${name}`);
+  await connectedPage(query);
+  const r = await js(`({ title: document.querySelector('#device-name').textContent,
+    firmware: document.querySelector('#firmware').hidden, hint: document.querySelector('#hint').textContent,
+    status: document.querySelector('#unit-status').textContent })`);
+  console.log(`${r.title}: ${r.status}`);
+  const fail = [];
+  if (r.title !== `${model}, in update mode`) fail.push(`${name}: title ${r.title}`);
+  if (!r.firmware) fail.push(`${name}: an install is offered`);
+  if (!/Unplug it and its power/.test(r.hint)) fail.push(`${name}: no power-cycle advice: ${r.hint}`);
+  return fail;
+}
+
+// The port picked again keeps failing to open (another tab or program holds
+// it): the page says so where it is seen, offers the pick again, and goes on
+// once the port opens.
+async function pickedPortBusy() {
+  const fail = await scenario('picked port busy', '?regrant=0&openFails=8', { reselect: true });
+  const log = await js("document.querySelector('#log').innerText");
+  if (!/does not open: Failed to open serial port\. Close any other flasher tab or program/.test(log)) fail.push('picked port busy: no visible reason in the log');
+  if (await js('window.__fake.requested') < 3) fail.push('picked port busy: the pick was not offered again');
+  return fail;
+}
+
 // A release installed, and the unit back answering as stock: no "runs fpvOS".
 // The test releases are named like none with fpvOS's own updater (which would
 // say its device mode), so no telling either way: no failure claimed.
@@ -693,6 +720,9 @@ try {
   failures.push(...await scenario('zip', '', { reselect: false, file: zip }));
   failures.push(...await scenario('xz', '', { reselect: false, file: xzFile }));
   failures.push(...await scenario('lost', '?regrant=0', { reselect: true }));
+  failures.push(...await pickedPortBusy());
+  failures.push(...await leftInUpdateMode('lite left in update mode', '?airMode=clean', 'Caddx Ascent Lite or Lite+'));
+  failures.push(...await leftInUpdateMode('vrx left in update mode', '?device=vrx&airMode=clean', 'Caddx Ascent VRX'));
   failures.push(...await scenario('stock-to-fpvos', '?device=vrx&fw=18_21_10', { reselect: true, file:fwu, source:fwu, profile:'ascent-vrx', bootstrap:true }));
   failures.push(...await scenario('fpvos-update', '?device=fpvos', { reselect:false, file:fwu, source:fwu, profile:'fpvos-ar9311' }));
   failures.push(...await scenario('p1-update', '?device=p1&startupDelay=8000', { reselect:false, file:p1Fwu, source:p1Fwu, profile:'fpvos-p1-air' }));

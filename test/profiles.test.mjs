@@ -395,3 +395,16 @@ test('stock return: bank switch on the P1 Air and SteadyDigital, the Lite on new
   const { switchesToStockBank } = await import('../devices/ascent-air.js');
   assert.equal(switchesToStockBank({}), false);
 });
+
+test('a Lite or VRX an earlier attempt left in update mode is named, and nothing else is', async () => {
+  const { leftInUpdateMode, profileForDevice } = await import('../devices/index.js');
+  const air = { usbVendorId: 0x1d76, usbProductId: 0x0101 }, vrx = { usbVendorId: 0x1d75, usbProductId: 0x0101 };
+  assert.equal(leftInUpdateMode(airCleanInfo, air)?.meta.id, 'ascent-air');
+  assert.equal(profileForDevice(airCleanInfo, air), null);
+  const vrxClean = { name: 'Ascent_VRX', firmware: 'Ascent_G_Gnd_18_21_10', hardware: 'FPV-Ascent-Gnd-485-V0.0-0.0', serial: '', status: 0, detail: 'OK' };
+  assert.equal(leftInUpdateMode(vrxClean, vrx)?.meta.id, 'ascent-vrx');
+  // normal units, an fpvOS Lite in its own update mode, and the wrong port
+  for (const [info, usb] of [[airInfo, air], [{ ...vrxClean, hardware: 'FPV-Ascent-Gnd-485-V1.2-1.0', serial: 'S1' }, vrx],
+    [{ ...airInfo, detail: 'clean RAM mode', sdk: '2026.11.beta1' }, air], [airCleanInfo, vrx]])
+    assert.equal(leftInUpdateMode(info, usb), null, JSON.stringify(info));
+});

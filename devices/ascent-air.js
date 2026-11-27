@@ -135,6 +135,11 @@ export const ASCENT_AIR = defineDevice({
     // to beta4) keep stock's, which answers as stock does: no telling then.
     releaseAnswers: (release) => keepsBridgeMode({ sdk: release }),
     describe: (info) => ({ model: airModel(info), fpvos: runsFpvos(info), firmware: runsFpvos(info) ? fpvosVersion(info) : stockFirmware(info) }),
+    // Stock's updater (and fpvOS's up to 2026.10.beta4) in update mode, as an
+    // earlier attempt left it: a power cycle starts it normally again.
+    leftInUpdateMode: (info) => info.name === 'Ascent' && info.hardware === 'FPV-Edu-Sky-V0.0-0.0'
+      && /^Ascent_H_Sky_\d+_\d+_\d+$/.test(info.firmware ?? ''),
+    updateModeModel: 'Caddx Ascent Lite or Lite+',
     identity: { matches: matchesAir, normalMatches: airNormalMatches, updateMatches: airUpdateMatches },
     image: aswImage({ prefix: 'Ascent_H_Sky', board: 3, parse: parseAirImage,
       checks: (p) => [['CRC-32', p.crcStored == null ? '' : p.crcStored === p.crcCalc
